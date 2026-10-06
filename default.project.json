@@ -1,0 +1,27 @@
+{
+  "name": "WEATHERED",
+
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "ServerScriptService": {
+      "Weather": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Weather": {
+          "$path": "src/client"
+        }
+      }
+    }
+  }
+}
