@@ -18,7 +18,7 @@ export type Grid3D = typeof(setmetatable(
 ))
 
 local function validateDimension(value: number, name: string)
-	assert(value > 0, name .. " must be greater than zero")
+	assert(value > 0 and value < math.huge, name .. " must be finite and greater than zero")
 	assert(value % 1 == 0, name .. " must be an integer")
 end
 
@@ -33,7 +33,11 @@ function Grid3D.new(
 	validateDimension(sizeY, "sizeY")
 	validateDimension(sizeZ, "sizeZ")
 
-	assert(cellSize > 0, "cellSize must be greater than zero")
+	-- CellSize and Origin are Roblox studs, independent of the simulation's meter scale.
+	assert(cellSize > 0 and cellSize < math.huge, "cellSize must be finite and greater than zero")
+	for _, component in { origin.X, origin.Y, origin.Z } do
+		assert(component == component and math.abs(component) < math.huge, "Origin must be finite")
+	end
 
 	return setmetatable({
 		SizeX = sizeX,
@@ -48,7 +52,10 @@ function Grid3D.new(
 end
 
 function Grid3D:IsInside(x: number, y: number, z: number): boolean
-	return x >= 1
+	return x % 1 == 0
+		and y % 1 == 0
+		and z % 1 == 0
+		and x >= 1
 		and x <= self.SizeX
 		and y >= 1
 		and y <= self.SizeY
@@ -63,7 +70,7 @@ function Grid3D:Index(x: number, y: number, z: number): number
 end
 
 function Grid3D:Coordinates(index: number): (number, number, number)
-	assert(index >= 1 and index <= self.Count, "Grid index outside domain")
+	assert(index % 1 == 0 and index >= 1 and index <= self.Count, "Grid index outside domain")
 
 	local zeroIndex = index - 1
 
@@ -89,6 +96,15 @@ function Grid3D:GridToWorld(x: number, y: number, z: number): Vector3
 end
 
 function Grid3D:WorldToGrid(position: Vector3): (number, number, number)
+	assert(
+		position.X == position.X
+			and position.Y == position.Y
+			and position.Z == position.Z
+			and math.abs(position.X) < math.huge
+			and math.abs(position.Y) < math.huge
+			and math.abs(position.Z) < math.huge,
+		"World position must be finite"
+	)
 	local relative = position - self.Origin
 
 	local x = math.floor(relative.X / self.CellSize) + 1

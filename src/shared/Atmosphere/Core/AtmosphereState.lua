@@ -2,15 +2,7 @@
 
 local Grid3D = require(script.Parent.Grid3D)
 
-export type FieldName =
-	"u"
-	| "v"
-	| "w"
-	| "theta"
-	| "qv"
-	| "qc"
-	| "qr"
-	| "pressure"
+export type FieldName = "u" | "v" | "w" | "theta" | "qv" | "qc" | "qr" | "pressure"
 
 export type AtmosphereState = {
 	Grid: Grid3D.Grid3D,
@@ -59,6 +51,13 @@ local function offset(index: number): number
 	return (index - 1) * FLOAT_SIZE
 end
 
+local function validateValue(value: number)
+	assert(
+		value == value and math.abs(value) <= 3.4028234663852886e38,
+		"Field value must be finite float32"
+	)
+end
+
 local function createField(count: number): buffer
 	return buffer.create(count * FLOAT_SIZE)
 end
@@ -82,7 +81,10 @@ function AtmosphereState.new(grid: Grid3D.Grid3D): AtmosphereState
 end
 
 function AtmosphereState:Get(field: FieldName, index: number): number
-	assert(index >= 1 and index <= self.Grid.Count, "Atmosphere index outside domain")
+	assert(
+		index % 1 == 0 and index >= 1 and index <= self.Grid.Count,
+		"Atmosphere index outside domain"
+	)
 
 	local fieldBuffer = self.Fields[field]
 	assert(fieldBuffer ~= nil, "Unknown atmospheric field")
@@ -91,7 +93,11 @@ function AtmosphereState:Get(field: FieldName, index: number): number
 end
 
 function AtmosphereState:Set(field: FieldName, index: number, value: number)
-	assert(index >= 1 and index <= self.Grid.Count, "Atmosphere index outside domain")
+	assert(
+		index % 1 == 0 and index >= 1 and index <= self.Grid.Count,
+		"Atmosphere index outside domain"
+	)
+	validateValue(value)
 
 	local fieldBuffer = self.Fields[field]
 	assert(fieldBuffer ~= nil, "Unknown atmospheric field")
@@ -99,26 +105,16 @@ function AtmosphereState:Set(field: FieldName, index: number, value: number)
 	buffer.writef32(fieldBuffer, offset(index), value)
 end
 
-function AtmosphereState:GetCell(
-	field: FieldName,
-	x: number,
-	y: number,
-	z: number
-): number
+function AtmosphereState:GetCell(field: FieldName, x: number, y: number, z: number): number
 	return self:Get(field, self.Grid:Index(x, y, z))
 end
 
-function AtmosphereState:SetCell(
-	field: FieldName,
-	x: number,
-	y: number,
-	z: number,
-	value: number
-)
+function AtmosphereState:SetCell(field: FieldName, x: number, y: number, z: number, value: number)
 	self:Set(field, self.Grid:Index(x, y, z), value)
 end
 
 function AtmosphereState:Fill(field: FieldName, value: number)
+	validateValue(value)
 	local fieldBuffer = self.Fields[field]
 	assert(fieldBuffer ~= nil, "Unknown atmospheric field")
 
