@@ -37,24 +37,27 @@ saturation, condense cloud water and later evaporate it as conditions change.
 | Atmospheric state | Eight packed float32 fields: `u`, `v`, `w`, `theta`, `qv`, `qc`, `qr`, `pressure` |
 | Thermodynamics | Potential temperature, hydrostatic background pressure and liquid-water saturation |
 | Warm-cloud microphysics | Condensation and evaporation with latent heating/cooling and local water conservation |
-| Vertical evolution | Buoyancy, linear momentum drag and double-buffered upwind transport |
+| 3D dynamics | Staggered winds, buoyancy, drag, viscosity and Boussinesq pressure projection |
+| Scalar transport | Conservative shared-face upwind fluxes; periodic X/Z and sealed Y boundaries |
 | Time stepping | Fixed 0.25-second steps with bounded catch-up |
 | Debug visualization | Reusable cloud-water voxel Parts, updated at 2 Hz |
-| Validation | Core mathematics, buffer indexing, numerical failures and a 240-second simulation run |
+| Validation | Core mathematics, conservative fluxes, projection, numerical failures and 240-second scenarios |
 
 The default grid contains **6,912 cells** (24 × 12 × 24). Display spacing is
-**64 Roblox studs**; physical vertical spacing is **100 meters**. These scales are
+**64 Roblox studs**; physical X/Y/Z spacing is **100 meters**. These scales are
 separate. The Part-based cloud is a development visualization.
 
 ### Prototype limits
 
-There is no horizontal circulation, pressure correction, precipitation fallout
-or terrain interaction yet. Vertical transport is diffusive and does not conserve
-global water in divergent flow, although phase conversion conserves local water.
-The initial cloud is transient and eventually fades without continued forcing.
+The flow uses a constant-density approximation rather than stratified atmospheric
+mass continuity. Water accounting reports unweighted mixing-ratio sums. First-order
+transport is diffusive: strong background winds can dilute the bubble before it
+condenses. There is no precipitation fallout, terrain interaction or sustained
+surface forcing.
 
-See [the dynamic-cloud milestone](docs/dynamic-cloud.md) for equations, assumptions,
-measured results and the complete Studio test procedure.
+See [Phase 2 dynamics](docs/phase2-dynamics.md) for equations, assumptions, measured
+results and the complete Studio test procedure. The [Phase 1 reference](docs/dynamic-cloud.md)
+records the earlier vertical-only prototype.
 
 ## Development setup
 
@@ -100,22 +103,24 @@ git diff --check
 
 Lune executes the production core and controller modules using a small Roblox
 module loader. Automated checks cover grid/world conversions, float32 buffer
-safety, saturation, phase-change water and enthalpy conservation, buoyancy,
-finite fields and fixed-step catch-up behavior.
+safety, saturation, phase-change water and enthalpy conservation, conservative
+3D transport, pressure projection, finite fields and fixed-step catch-up behavior.
 
 Studio testing remains a separate step. In Play mode, watch the server's ten-second
 diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder. The default transient
-cloud should begin appearing after roughly **50–80 simulated seconds**.
+cloud should begin appearing after roughly **90 simulated seconds**. Before Play,
+set Number attributes `BackgroundU = 0.5` and `BackgroundV = 0.25` on
+`ServerScriptService.Weather.WeatherServer` for the measured moving-cloud case.
 
 ## Repository layout
 
 ```text
 src/
 ├── shared/Atmosphere/
-│   ├── Core/             Grid, constants and packed atmospheric state
+│   ├── Core/             Physical geometry, staggered faces and packed state
 │   ├── Thermodynamics/   Sounding, temperature conversion and saturation
 │   ├── Microphysics/     Warm-cloud phase conversion
-│   ├── Dynamics/         Buoyancy and vertical momentum
+│   ├── Dynamics/         Momentum, pressure projection and conservative 3D transport
 │   ├── Utilities/        State validation
 │   ├── Simulation.lua    Simulation ownership and stepping
 │   └── init.lua          Public atmosphere entry point
@@ -133,10 +138,10 @@ tests/                    Roblox module loader for Lune
 
 ## Direction
 
-1. Establish mass-conservative transport, a velocity/divergence constraint and
-   horizontal motion.
-2. Develop precipitation, surface forcing, terrain interaction and storm lifecycle
-   on that numerical foundation.
+1. Measure transport accuracy and cost, improve bounded transport and add
+   controlled surface forcing with verified water budgets.
+2. Develop precipitation, terrain interaction and storm lifecycle on that
+   numerical foundation.
 3. Expose atmospheric sampling and adapters for wind, precipitation, visibility
    and the larger survival game's existing systems.
 4. Replace debug voxels with field-driven cloud clustering, rendering and client LOD.

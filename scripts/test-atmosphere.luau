@@ -5,6 +5,8 @@
 local roblox = require("@lune/roblox")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
+local process = require("@lune/process")
+local serde = require("@lune/serde")
 local createLoader = require("../tests/RobloxModuleLoader")
 local root, loadModule = createLoader("src/shared/Atmosphere")
 local Grid3D = loadModule(root.Core.Grid3D)
@@ -260,78 +262,25 @@ print(
 	)
 )
 
-local simulationGrid = Grid3D.new(24, 12, 24, 64, Vector3.new(-768, 128, -768))
-local simulation = Atmosphere.new(simulationGrid)
-local function metrics(): (number, number, number, number)
-	local totalWater = 0
-	local maximumCloud = 0
-	local maximumSpeed = 0
-	local cloudCells = 0
-	for index = 1, simulationGrid.Count do
-		local qv = simulation.State:Get("qv", index)
-		local qc = simulation.State:Get("qc", index)
-		totalWater += qv + qc
-		maximumCloud = math.max(maximumCloud, qc)
-		maximumSpeed = math.max(maximumSpeed, math.abs(simulation.State:Get("w", index)))
-		if qc >= 0.0001 then
-			cloudCells += 1
-		end
-	end
-	return totalWater, maximumCloud, maximumSpeed, cloudCells
+local testDynamics = require("../tests/three-dimensional-dynamics")
+local operatorsOnly = table.find(process.args, "--operators-only") ~= nil
+local scenarioSummaries = testDynamics(root, loadModule, check, near, rejects, operatorsOnly)
+if operatorsOnly then
+	print(string.format("PASS: %d scalar and 3D operator checks", checks))
+	return
 end
-local initialWater, initialCloud = metrics()
-near(initialCloud, 0, 0, "Default atmosphere starts clear")
-local maximumCloud = 0
-local maximumSpeed = 0
-local firstCloudTime: number? = nil
-local startTime = os.clock()
-for step = 1, 960 do
-	simulation:Step(0.25)
-	if step % 40 == 0 then
-		local water, cloud, speed, cloudCells = metrics()
-		maximumCloud = math.max(maximumCloud, cloud)
-		maximumSpeed = math.max(maximumSpeed, speed)
-		if cloud >= 0.0001 and firstCloudTime == nil then
-			firstCloudTime = simulation.Time
-		end
-		for index = 1, simulationGrid.Count do
-			for _, name in { "u", "v", "w", "theta", "qv", "qc", "qr", "pressure" } do
-				local value = simulation.State:Get(name, index)
-				check(finite(value), "Simulation fields stay finite")
-				if name == "qv" or name == "qc" or name == "qr" then
-					check(value >= 0, "Simulation water stays nonnegative")
-				end
-			end
-		end
-		if step % 240 == 0 then
-			print(
-				string.format(
-					"t=%.0fs qc_max=%.6f kg/kg |w|_max=%.3f m/s cloud_cells=%d water_drift=%+.5f%%",
-					simulation.Time,
-					cloud,
-					speed,
-					cloudCells,
-					(water / initialWater - 1) * 100
-				)
-			)
-		end
-	end
-end
-near(simulation.Time, 240, 1e-10, "Simulation time uses fixed steps")
-check(
-	maximumSpeed > 0 and maximumSpeed < 100,
-	"Vertical velocity develops without immediate instability"
+fs.writeDir("build")
+fs.writeFile(
+	"build/phase2-validation.json",
+	serde.encode("json", {
+		Phase1MeasuredWaterDriftPercent = -0.19963,
+		SimulationSecondsPerScenario = 240,
+		FixedDt = 0.25,
+		DiagnosticSamplingSeconds = 10,
+		Scenarios = scenarioSummaries,
+	})
 )
-print(
-	string.format(
-		"PASS: 960 stable production simulation steps (240s), first visible cloud by %.1fs, peak qc=%.6f, peak |w|=%.3f, runtime=%.2fs, total checks=%d",
-		firstCloudTime or -1,
-		maximumCloud,
-		maximumSpeed,
-		os.clock() - startTime,
-		checks
-	)
-)
+print("Saved measured scenario diagnostics: build/phase2-validation.json")
 
 -- A compact domain is enough to check numerical failure behavior.
 local failureGrid = Grid3D.new(3, 4, 3, 64, Vector3.zero)
@@ -351,10 +300,10 @@ rejects(function()
 end, "Invalid buffer values must stop simulation")
 near(failureSimulation.Time, 0, 0, "A failed simulation does not advance its clock")
 local cflSimulation = Atmosphere.new(failureGrid)
-cflSimulation.State:SetCell("w", 2, 2, 2, 1000)
+buffer.writef32(cflSimulation.Faces.U, (failureGrid:Index(2, 2, 2) - 1) * 4, 1000)
 rejects(function()
 	cflSimulation:Step(0.25)
-end, "Excessive vertical Courant number must fail explicitly")
+end, "Excessive momentum Courant number must fail explicitly")
 near(cflSimulation.Time, 0, 0, "A failed CFL check does not advance the clock")
 
 -- The service shim is only a lookup adapter; the real production controller
@@ -375,8 +324,10 @@ local controllerRoot, loadControllerModule = createLoader("src/server/Simulation
 	end,
 })
 local controller = loadControllerModule(controllerRoot.SimulationController)
-local controllerState = controller.Initialize()
+local controllerState = controller.Initialize({ BackgroundU = 0.5, BackgroundV = 0.25 })
 check(controller.Initialize() == controllerState, "Controller Initialize is idempotent")
+near(controllerState:Get("u", 1), 0.5, 0, "Lazy controller Initialize accepts background x wind")
+near(controllerState:Get("v", 1), 0.25, 0, "Lazy controller Initialize accepts background z wind")
 check(controller.Advance(0.1) == 0, "Partial frame does not step atmosphere")
 check(controller.Advance(0.1) == 0, "Accumulated partial frames remain below fixed dt")
 check(controller.Advance(0.05) == 1, "Fractional frame times combine into one fixed step")
@@ -385,6 +336,19 @@ check(controller.Advance(3) == 8, "Controller caps catch-up at eight steps")
 near(controller.GetTime(), 2.25, 1e-12, "Catch-up advances only executed physical time")
 near(controller.GetDroppedTime(), 1, 1e-12, "Controller accounts for dropped catch-up backlog")
 check(warnings == 1, "Controller reports catch-up backlog")
+local controllerDiagnostics = controller.GetDiagnostics()
+near(
+	controllerDiagnostics.Time,
+	controller.GetTime(),
+	0,
+	"Controller exposes flattened simulation diagnostics"
+)
+near(
+	controllerDiagnostics.DroppedSimulationTime,
+	1,
+	0,
+	"Controller diagnostics include dropped simulation time"
+)
 rejects(function()
 	controller.Advance(-1)
 end, "Negative Heartbeat dt must fail")
@@ -397,5 +361,3 @@ print(
 		checks
 	)
 )
-check(maximumCloud >= 0.0001, "Warm/moist perturbation forms visible cloud water dynamically")
-print("PASS: warm/moist perturbation produces visible cloud water dynamically")

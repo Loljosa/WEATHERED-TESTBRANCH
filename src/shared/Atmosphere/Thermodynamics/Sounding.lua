@@ -3,12 +3,22 @@
 local Constants = require(script.Parent.Parent.Core.Constants)
 local AtmosphereState = require(script.Parent.Parent.Core.AtmosphereState)
 local Saturation = require(script.Parent.Saturation)
+local Validation = require(script.Parent.Parent.Utilities.Validation)
 
 local Sounding = {}
+
+export type Options = {
+	BackgroundU: number?, -- m/s at the model bottom
+	BackgroundV: number?, -- m/s at the model bottom
+	ShearU: number?, -- (m/s)/m of physical height
+	ShearV: number?, -- (m/s)/m of physical height
+}
 
 export type Profile = {
 	Theta: buffer,
 	Qv: buffer,
+	U: buffer,
+	V: buffer,
 	CellHeightMeters: number,
 }
 
@@ -18,24 +28,36 @@ local SURFACE_THETA = 300 -- K
 local THETA_GRADIENT = 0.003 -- K/m
 local SURFACE_RH = 0.85
 local MOISTURE_SCALE_HEIGHT = 3000 -- m
+local MAX_FLOAT32 = 3.4028234663852886e38
 
 function Sounding.Initialize(
 	state: AtmosphereState.AtmosphereState,
-	cellHeightMeters: number
+	cellHeightMeters: number,
+	options: Options?
 ): Profile
 	assert(
 		cellHeightMeters > 0 and cellHeightMeters < math.huge,
 		"Physical cell height must be positive and finite"
 	)
+	local settings: Options = options or {}
+	local backgroundU = settings.BackgroundU or 0
+	local backgroundV = settings.BackgroundV or 0
+	local shearU = settings.ShearU or 0
+	local shearV = settings.ShearV or 0
+	assert(Validation.IsFinite(backgroundU), "BackgroundU must be finite")
+	assert(Validation.IsFinite(backgroundV), "BackgroundV must be finite")
+	assert(Validation.IsFinite(shearU), "ShearU must be finite")
+	assert(Validation.IsFinite(shearV), "ShearV must be finite")
+
 	local grid = state.Grid
 	local profile: Profile = {
 		Theta = buffer.create(grid.SizeY * 4),
 		Qv = buffer.create(grid.SizeY * 4),
+		U = buffer.create(grid.SizeY * 4),
+		V = buffer.create(grid.SizeY * 4),
 		CellHeightMeters = cellHeightMeters,
 	}
 
-	state:Fill("u", 0)
-	state:Fill("v", 0)
 	state:Fill("w", 0)
 	state:Fill("qc", 0)
 	state:Fill("qr", 0)
@@ -49,6 +71,16 @@ function Sounding.Initialize(
 
 	for y = 1, grid.SizeY do
 		local height = (y - 0.5) * cellHeightMeters
+		local u = backgroundU + shearU * height
+		local v = backgroundV + shearV * height
+		assert(
+			Validation.IsFinite(u) and math.abs(u) <= MAX_FLOAT32,
+			"Sounding U must be finite and representable as float32"
+		)
+		assert(
+			Validation.IsFinite(v) and math.abs(v) <= MAX_FLOAT32,
+			"Sounding V must be finite and representable as float32"
+		)
 		local theta = SURFACE_THETA + THETA_GRADIENT * height
 		-- Integrate d(Pi)/dz = -g/(cp*theta(z)) for linear theta(z).
 		local exner = 1
@@ -63,6 +95,8 @@ function Sounding.Initialize(
 		local rowOffset = (y - 1) * 4
 		buffer.writef32(profile.Theta, rowOffset, theta)
 		buffer.writef32(profile.Qv, rowOffset, qv)
+		buffer.writef32(profile.U, rowOffset, u)
+		buffer.writef32(profile.V, rowOffset, v)
 
 		for z = 1, grid.SizeZ do
 			for x = 1, grid.SizeX do
@@ -85,6 +119,8 @@ function Sounding.Initialize(
 				local parcelRH = rh + (0.98 - rh) * strength
 				local parcelQv = parcelRH * Saturation.MixingRatio(parcelTheta * exner, pressure)
 				local offset = ((y - 1) * layerStride + (z - 1) * grid.SizeX + x - 1) * 4
+				buffer.writef32(state.Fields.u, offset, u)
+				buffer.writef32(state.Fields.v, offset, v)
 				buffer.writef32(state.Fields.theta, offset, parcelTheta)
 				buffer.writef32(state.Fields.qv, offset, parcelQv)
 				buffer.writef32(state.Fields.pressure, offset, pressure)

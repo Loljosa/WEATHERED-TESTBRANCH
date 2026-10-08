@@ -3,6 +3,13 @@
 local Grid3D = {}
 Grid3D.__index = Grid3D
 
+-- Physical atmospheric spacing in meters, independent of Roblox display studs.
+export type PhysicalSpacing = {
+	Dx: number,
+	Dy: number,
+	Dz: number,
+}
+
 export type Grid3D = typeof(setmetatable(
 	{} :: {
 		SizeX: number,
@@ -11,6 +18,9 @@ export type Grid3D = typeof(setmetatable(
 
 		CellSize: number,
 		Origin: Vector3,
+		Dx: number,
+		Dy: number,
+		Dz: number,
 
 		Count: number,
 	},
@@ -27,7 +37,8 @@ function Grid3D.new(
 	sizeY: number,
 	sizeZ: number,
 	cellSize: number,
-	origin: Vector3
+	origin: Vector3,
+	spacing: PhysicalSpacing?
 ): Grid3D
 	validateDimension(sizeX, "sizeX")
 	validateDimension(sizeY, "sizeY")
@@ -38,6 +49,12 @@ function Grid3D.new(
 	for _, component in { origin.X, origin.Y, origin.Z } do
 		assert(component == component and math.abs(component) < math.huge, "Origin must be finite")
 	end
+	local dx = if spacing then spacing.Dx else 100
+	local dy = if spacing then spacing.Dy else 100
+	local dz = if spacing then spacing.Dz else 100
+	assert(dx > 0 and dx < math.huge, "Dx must be finite and positive (meters)")
+	assert(dy > 0 and dy < math.huge, "Dy must be finite and positive (meters)")
+	assert(dz > 0 and dz < math.huge, "Dz must be finite and positive (meters)")
 
 	return setmetatable({
 		SizeX = sizeX,
@@ -46,6 +63,9 @@ function Grid3D.new(
 
 		CellSize = cellSize,
 		Origin = origin,
+		Dx = dx,
+		Dy = dy,
+		Dz = dz,
 
 		Count = sizeX * sizeY * sizeZ,
 	}, Grid3D)
@@ -93,6 +113,13 @@ function Grid3D:GridToWorld(x: number, y: number, z: number): Vector3
 			(y - 0.5) * self.CellSize,
 			(z - 0.5) * self.CellSize
 		)
+end
+
+-- Cell-center physical coordinates in meters from the simulation domain corner.
+-- The Roblox Origin is intentionally absent from these physical coordinates.
+function Grid3D:GridToPhysical(x: number, y: number, z: number): (number, number, number)
+	assert(self:IsInside(x, y, z), "Grid coordinate outside domain")
+	return (x - 0.5) * self.Dx, (y - 0.5) * self.Dy, (z - 0.5) * self.Dz
 end
 
 function Grid3D:WorldToGrid(position: Vector3): (number, number, number)

@@ -1,5 +1,12 @@
 # Dynamic warm-cloud milestone
 
+This document records **Phase 1** and its measured vertical-column prototype.
+Phase 2 replaces that transport and momentum update with three-dimensional
+finite-volume transport and a staggered pressure projection. See
+[Phase 2 dynamics](phase2-dynamics.md) for the current solver, limitations and
+Studio procedure. The Phase 1 timings and water drift below are historical
+reference results, not expected Phase 2 output.
+
 The manually painted cloud-water ellipsoid has been replaced by an initially
 clear atmospheric sounding and a warm/moist perturbation. All cloud water now
 comes from vapor condensation. The field remains authoritative; debug Parts have

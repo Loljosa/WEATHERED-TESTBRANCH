@@ -12,7 +12,22 @@ local DIAGNOSTIC_INTERVAL = 10
 
 print("[WEATHERED] Starting atmosphere engine", Atmosphere.GetVersion())
 
-local state = SimulationController.Initialize()
+-- Read configuration once at startup; no Instance lookups inside physics loops.
+local function numericAttribute(name: string): number
+	local value = script:GetAttribute(name)
+	if value == nil then
+		return 0
+	end
+	assert(typeof(value) == "number", name .. " must be a numeric script attribute")
+	return value :: number
+end
+
+local state = SimulationController.Initialize({
+	BackgroundU = numericAttribute("BackgroundU"),
+	BackgroundV = numericAttribute("BackgroundV"),
+	ShearU = numericAttribute("ShearU"),
+	ShearV = numericAttribute("ShearV"),
+})
 local visibleVoxels = VoxelDebugRenderer.Render(state)
 local renderAccumulator = 0
 local diagnosticAccumulator = 0
@@ -23,13 +38,39 @@ local function printDiagnostics()
 
 	print(
 		string.format(
-			"[WEATHERED] t=%.1fs, qc_max=%.6f kg/kg, |w|_max=%.2f m/s, cloud cells=%d, visible=%d, dropped=%.2fs",
+			"[WEATHERED] t=%.1fs qc_max=%.6f cloud=%d visible=%d; u[%.2f,%.2f] v[%.2f,%.2f] w[%.2f,%.2f]m/s; CFL=%.4f step=%.2fms dropped=%.2fs",
 			diagnostics.Time,
 			diagnostics.MaxCloudWater,
-			diagnostics.MaxVerticalVelocity,
 			diagnostics.CloudCells,
 			visibleVoxels,
-			SimulationController.GetDroppedTime()
+			diagnostics.MinU,
+			diagnostics.MaxU,
+			diagnostics.MinV,
+			diagnostics.MaxV,
+			diagnostics.MinW,
+			diagnostics.MaxW,
+			diagnostics.MaxCourant,
+			diagnostics.StepMilliseconds,
+			diagnostics.DroppedSimulationTime
+		)
+	)
+	print(
+		string.format(
+			"[WEATHERED] div_rms %.3g -> %.3g/s (max %.3g -> %.3g); PCG=%d residual=%.3g/s; unweighted qv/qc/qr sums=%.9g/%.9g/%.9g drift=%+.6f%%; qc centroid=(%.1f,%.1f,%.1f)m defined=%s",
+			diagnostics.DivergenceBeforeRms,
+			diagnostics.DivergenceAfterRms,
+			diagnostics.DivergenceBeforeMax,
+			diagnostics.DivergenceAfterMax,
+			diagnostics.ProjectionIterations,
+			diagnostics.ProjectionResidual,
+			diagnostics.QvSum,
+			diagnostics.QcSum,
+			diagnostics.QrSum,
+			diagnostics.WaterDriftFraction * 100,
+			diagnostics.CloudCentroidX,
+			diagnostics.CloudCentroidY,
+			diagnostics.CloudCentroidZ,
+			tostring(diagnostics.CloudCentroidDefined)
 		)
 	)
 end
