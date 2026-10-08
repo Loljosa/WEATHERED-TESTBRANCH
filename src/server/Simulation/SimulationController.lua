@@ -11,6 +11,7 @@ local SimulationController = {}
 
 -- Simulation seconds, independent of Roblox's Heartbeat frequency.
 local FIXED_DT = Atmosphere.FixedDt
+local SIMULATION_SPEED = 2
 local MAX_CATCH_UP_STEPS = 8
 local BACKLOG_WARNING_INTERVAL = 5
 
@@ -66,7 +67,7 @@ function SimulationController.Advance(frameDt: number): number
 	local active = getSimulation(nil)
 
 	wallTime += frameDt
-	accumulator += frameDt
+	accumulator += frameDt * SIMULATION_SPEED
 
 	local steps = 0
 	while accumulator >= FIXED_DT and steps < MAX_CATCH_UP_STEPS do
