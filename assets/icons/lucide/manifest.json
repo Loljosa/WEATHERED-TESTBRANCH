@@ -1,0 +1,118 @@
+{
+  "upstream": {
+    "project": "Lucide",
+    "package": "lucide-static",
+    "version": "1.54.0",
+    "repository": "https://github.com/lucide-icons/lucide",
+    "sourceTag": "1.54.0",
+    "sourceCommit": "a04f228cd01185e09c188b7227b9600c08c565ec",
+    "tarballUrl": "https://registry.npmjs.org/lucide-static/-/lucide-static-1.54.0.tgz",
+    "tarballSha256": "e902c38c3b0b132c90c26cd24e7021068e278a53c4c72fc3e49ef53dfe9d35fa",
+    "tarballSha1": "3addc8999298b41f788f3b15cf8042a4607293c6",
+    "tarballIntegrity": "sha512-Y0NVQ7uX17m+Jee/coLs7uxGF3bEyWHXiXFBXxmE7BnjjMa5o0s1gR4zQHBQHN19RYaQWVG2cx4GdrW/WroyrA=="
+  },
+  "modifications": [
+    "Replace the root stroke=\"currentColor\" with stroke=\"#00A6A6\"; all official SVG geometry and license comments remain unchanged."
+  ],
+  "licenseFile": "LICENSE",
+  "licenseSha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+  "licenseNote": "The exact upstream LICENSE includes ISC terms and the MIT notice for Feather-derived icons. arrow-up and terminal are in that Feather list.",
+  "icons": [
+    {
+      "file": "cloud.svg",
+      "packagePath": "package/icons/cloud.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/cloud.svg",
+      "originalSha256": "efa97a698e63767978a80e681745560080464b922da7c39b8692a00f6134dd08",
+      "localSha256": "17971a3fe737cf8ab4db7b7b9b1e22213b6c06c7431447fab2f04a2ec8178e79",
+      "license": "ISC"
+    },
+    {
+      "file": "wind.svg",
+      "packagePath": "package/icons/wind.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/wind.svg",
+      "originalSha256": "22e4cfd9dd6456de641a81d630088087b83266b04dbb088635aebddc4bc415b6",
+      "localSha256": "39f4743581f0402b8367b10041a26343adf17c1160a434137d7a5db726d7dcd0",
+      "license": "ISC"
+    },
+    {
+      "file": "cpu.svg",
+      "packagePath": "package/icons/cpu.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/cpu.svg",
+      "originalSha256": "82ade0d568607eb349efd0fee3e50829c7ce356ca3bfbaa68a8993b0a06c3b79",
+      "localSha256": "b79bbf9040b4dd1a3c1a2cfc04b91e56bd5f723964138b2825aa56abb7254f26",
+      "license": "ISC"
+    },
+    {
+      "file": "thermometer-sun.svg",
+      "packagePath": "package/icons/thermometer-sun.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/thermometer-sun.svg",
+      "originalSha256": "2a249a7a7b76f982b4005826030430e22f510fb2f837df240bbb1a38a8709aed",
+      "localSha256": "6e5cee2d8f163ad16c6214f8ccbd04a2b07376709b56e5213b843735be706c2d",
+      "license": "ISC"
+    },
+    {
+      "file": "arrow-up.svg",
+      "packagePath": "package/icons/arrow-up.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/arrow-up.svg",
+      "originalSha256": "2082b52f3880aaf55b20465f7b799ebc7e64812918916e35c19e289f74ce3011",
+      "localSha256": "9130713b7457b9f7d029bd2ea6722ed8029177125d7e9418de8158edc6f65120",
+      "license": "ISC AND MIT"
+    },
+    {
+      "file": "droplets.svg",
+      "packagePath": "package/icons/droplets.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/droplets.svg",
+      "originalSha256": "d624272e2b18949fb6d07349c9537a5bbab684d1df918e95852d438a29658c6a",
+      "localSha256": "705c0d5f510aadddb0ccbb3bba5a68dbfc89905417eee1f8610299147e58f9cb",
+      "license": "ISC"
+    },
+    {
+      "file": "box.svg",
+      "packagePath": "package/icons/box.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/box.svg",
+      "originalSha256": "b62165cd4542b9a1bf663474f5bc4ee02ff62d1c3d08601cd1d4890d1cf03dba",
+      "localSha256": "f6df05d5dc22436217168de5d64f03b6d52f0c138b1755a24510f0cd3f134c56",
+      "license": "ISC"
+    },
+    {
+      "file": "timer.svg",
+      "packagePath": "package/icons/timer.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/timer.svg",
+      "originalSha256": "1c8250dae3ba1d1d3e4fcb2f616f45c54313ab5d6111261f9e0a634cd947d7ed",
+      "localSha256": "3358790fbfe4420e22d42d6a32b8ac419e5945ef20978eac433c695aea82f092",
+      "license": "ISC"
+    },
+    {
+      "file": "terminal.svg",
+      "packagePath": "package/icons/terminal.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/terminal.svg",
+      "originalSha256": "f6fa5604e5d8db702c16289dadc0ba2c2675bcde435b2631bfa1f6dd6c14d6a7",
+      "localSha256": "de2cfa9d40705aa10d81ff22638bc55631edc8a65c82f11a1cf866cc32c28821",
+      "license": "ISC AND MIT"
+    },
+    {
+      "file": "book-open.svg",
+      "packagePath": "package/icons/book-open.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/book-open.svg",
+      "originalSha256": "d15be746db62cbc0aca1ac3f6946ffebe052c82f7fcc9a8bf511d040e0c41425",
+      "localSha256": "3650d2527d88f1b681466e4cca686963ff7ed711980a0128ec9cfc53eac618af",
+      "license": "ISC"
+    },
+    {
+      "file": "activity.svg",
+      "packagePath": "package/icons/activity.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/activity.svg",
+      "originalSha256": "5f2119e22c6404e59ed59f00ebc1f246307f56b7596fca9f02528dd654c0d9be",
+      "localSha256": "5f1c8d1740ded55c7e91607635f1f000c1d401a17883bf86f4877aa632d48a16",
+      "license": "ISC"
+    },
+    {
+      "file": "map.svg",
+      "packagePath": "package/icons/map.svg",
+      "sourceUrl": "https://unpkg.com/lucide-static@1.54.0/icons/map.svg",
+      "originalSha256": "89fc55e569e1602d86861e3d48cbcd7ce9cf5ea648f3214948feaac69167fb6d",
+      "localSha256": "72e189dd09e5f5e98b5718ea7621144337760242cec78a724facfccd6d3bbc41",
+      "license": "ISC"
+    }
+  ]
+}

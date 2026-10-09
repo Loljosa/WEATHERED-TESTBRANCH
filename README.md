@@ -16,11 +16,11 @@
 </p>
 
 <p align="center">
-  <a href="#the-project">Explore</a> &nbsp;·&nbsp;
-  <a href="#launch-the-atmosphere">Build &amp; run</a> &nbsp;·&nbsp;
-  <a href="#take-control-of-the-sky">Cloud controls</a> &nbsp;·&nbsp;
-  <a href="#development-activity">Activity</a> &nbsp;·&nbsp;
-  <a href="#field-notes">Documentation</a>
+  <a href="#the-project"><img src="assets/icons/lucide/map.svg" width="16" height="16" alt=""> Explore</a> &nbsp;·&nbsp;
+  <a href="#launch-the-atmosphere"><img src="assets/icons/lucide/terminal.svg" width="16" height="16" alt=""> Build &amp; run</a> &nbsp;·&nbsp;
+  <a href="#take-control-of-the-sky"><img src="assets/icons/lucide/wind.svg" width="16" height="16" alt=""> Cloud controls</a> &nbsp;·&nbsp;
+  <a href="#development-activity"><img src="assets/icons/lucide/activity.svg" width="16" height="16" alt=""> Activity</a> &nbsp;·&nbsp;
+  <a href="#field-notes"><img src="assets/icons/lucide/book-open.svg" width="16" height="16" alt=""> Documentation</a>
 </p>
 
 ---
@@ -39,14 +39,17 @@ condensation. The visible voxels are a diagnostic view of that simulation.
 <table>
 <tr>
 <td width="33%" valign="top">
+<img src="assets/icons/lucide/cloud.svg" width="32" height="32" alt="">
 <h3>Dynamic clouds</h3>
 Warm/moist air rises, moves, condenses and evaporates. Cloud water starts at zero.
 </td>
 <td width="33%" valign="top">
+<img src="assets/icons/lucide/wind.svg" width="32" height="32" alt="">
 <h3>A moving atmosphere</h3>
 3D transport and live wind controls move the field. The source deforms as it evolves.
 </td>
 <td width="33%" valign="top">
+<img src="assets/icons/lucide/cpu.svg" width="32" height="32" alt="">
 <h3>A practical preview</h3>
 Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </td>
@@ -54,20 +57,35 @@ Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </table>
 
 <p align="center">
-  <picture>
-    <source media="(max-width: 600px)" srcset="assets/readme/engine-at-a-glance-mobile.svg">
-    <img src="assets/readme/engine-at-a-glance.svg" alt="Engine 0.2.4-alpha; fixed 0.25-second steps; 3,072 cells in the Laptop preset; 12-stud debug voxels" width="1000">
-  </picture>
+  <img src="https://img.shields.io/badge/ENGINE-0.2.4--alpha-d6a652?style=for-the-badge" alt="Engine 0.2.4-alpha">
+  <img src="https://img.shields.io/badge/FIXED_STEP-0.25_s-00a6a6?style=for-the-badge" alt="Fixed timestep: 0.25 seconds">
+  <img src="https://img.shields.io/badge/LAPTOP_CELLS-3%2C072-628b57?style=for-the-badge" alt="Laptop preset: 3,072 simulation cells">
+  <img src="https://img.shields.io/badge/DEBUG_VOXEL-12_studs-628b57?style=for-the-badge" alt="Debug voxel width: 12 studs">
 </p>
 
 ### From clear air to a cloud
 
-<p align="center">
-  <picture>
-    <source media="(max-width: 600px)" srcset="assets/readme/cloud-lifecycle-mobile.svg">
-    <img src="assets/readme/cloud-lifecycle.svg" alt="Warm and moist source → buoyancy and 3D transport → saturation and phase conversion → visible cloud-water field" width="1000">
-  </picture>
-</p>
+<table>
+<thead><tr><th>Stage</th><th>What evolves</th></tr></thead>
+<tbody>
+<tr>
+<td><img src="assets/icons/lucide/thermometer-sun.svg" width="24" height="24" alt=""> <strong>1 · Warm + moist</strong></td>
+<td>Initialize potential temperature and vapor. Cloud water starts at zero.</td>
+</tr>
+<tr>
+<td><img src="assets/icons/lucide/arrow-up.svg" width="24" height="24" alt=""> <strong>2 · Rise + move</strong></td>
+<td>Buoyancy and 3D transport develop the source; background wind carries it.</td>
+</tr>
+<tr>
+<td><img src="assets/icons/lucide/droplets.svg" width="24" height="24" alt=""> <strong>3 · Reach saturation</strong></td>
+<td>Vapor converts into cloud water, accounting for latent heat.</td>
+</tr>
+<tr>
+<td><img src="assets/icons/lucide/cloud.svg" width="24" height="24" alt=""> <strong>4 · Show the field</strong></td>
+<td>Debug voxels display cells containing qc as the cloud shape evolves.</td>
+</tr>
+</tbody>
+</table>
 
 **The field drives the visuals.** Future gameplay will sample atmospheric state
 for wind, rain and visibility. Cloud Parts are a debug renderer, not gameplay
@@ -165,7 +183,7 @@ update at a lower frequency than physics; the simulation always uses a fixed
 **0.25-second timestep**.
 
 <details>
-<summary><strong>Performance presets, display height and physical units</strong></summary>
+<summary><img src="assets/icons/lucide/timer.svg" width="18" height="18" alt=""> <strong>Performance presets, display height and physical units</strong></summary>
 
 | Setting | Laptop · default | Full · optional |
 | --- | ---: | ---: |
@@ -243,9 +261,10 @@ performance need the [manual Studio test](docs/phase2-dynamics.md#exact-studio-t
 | [Phase 2 dynamics](docs/phase2-dynamics.md) | Equations, boundaries, units, conservation and solver diagnostics |
 | [Phase 1 reference](docs/dynamic-cloud.md) | The earlier vertical-only warm-cloud prototype |
 | [Activity calendar setup](docs/readme-metrics.md) | Snapshot provenance and optional lowlighter/metrics automation |
+| [Visual assets](docs/readme-assets.md) | Official Lucide icons, premade badges and third-party licenses |
 
 <details>
-<summary><strong>Repository map</strong></summary>
+<summary><img src="assets/icons/lucide/box.svg" width="18" height="18" alt=""> <strong>Repository map</strong></summary>
 
 ```text
 assets/                   Branding and README visuals
@@ -306,6 +325,7 @@ isocalendar after you configure `METRICS_TOKEN`.
 <p align="center">
   <strong>WEATHERED</strong> · Made for Roblox · Built in Luau<br>
   <a href="LICENSE">MIT License</a> ·
+  <a href="docs/readme-assets.md">Lucide icon credits</a> ·
   <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/issues">Issues &amp; feedback</a> ·
   <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/commits/main">Development history</a>
 </p>
