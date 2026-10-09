@@ -54,7 +54,7 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		{ BackgroundU = 2, BackgroundV = 1, BubbleRelativeHumidity = 0.999 },
 		{
 			CellSizeStuds = 12,
-			CloudBottomStuds = 24,
+			CloudBottomStuds = 424,
 			SizeX = laptopSettings.SizeX,
 			SizeY = laptopSettings.SizeY,
 			SizeZ = laptopSettings.SizeZ,
@@ -69,7 +69,7 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 	near(grid.CellSize, 12, 0, "Laptop geometry retains exact 12-stud diagnostic cubes")
 	near(grid.Origin.X, -96, 0, "Laptop display remains centered along X")
 	near(grid.Origin.Z, -96, 0, "Laptop display remains centered along Z")
-	near(grid.Origin.Y, 24, 0, "Laptop clouds retain a nearby 24-stud bottom")
+	near(grid.Origin.Y, 424, 0, "Laptop display bottom clears terrain around Y=70 studs")
 	near(grid.SizeX * grid.Dx, 2400, 0, "Laptop X extent retains the 2400-meter physical domain")
 	near(grid.SizeY * grid.Dy, 1200, 0, "Laptop Y extent retains the 1200-meter physical domain")
 	near(grid.SizeZ * grid.Dz, 2400, 0, "Laptop Z extent retains the 2400-meter physical domain")

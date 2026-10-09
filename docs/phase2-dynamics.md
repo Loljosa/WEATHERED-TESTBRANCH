@@ -6,7 +6,7 @@ float32 phase conversion and failed-step isolation. The current 0.2.2-alpha
 bootstrap adds a Laptop preset and bounded frame work. Cloud water still comes
 from condensation of an initially clear warm/moist perturbation.
 
-The Studio bootstrap uses a compact, nearby preview. Its debug Parts represent
+The Studio bootstrap uses a compact preview above normal terrain. Its debug Parts represent
 the atmospheric field and have no collision or gameplay role. No inventory,
 movement, world generation, existing rain or final rendering system is changed.
 
@@ -20,7 +20,7 @@ before starting the test:
 | --- | --- | --- |
 | `PerformancePreset` | `Laptop` | Startup-only String: `Laptop` or `Full`, selecting grid and execution settings |
 | `CellSizeStuds` | 12 | Display spacing and exact debug Part width/height/depth, Roblox studs |
-| `CloudBottomStuds` | 24 | Bottom of the display domain, workspace Y studs |
+| `CloudBottomStuds` | 424 | Bottom of the display domain, workspace Y studs |
 | `BackgroundU` | 2 | Background wind along X, physical m/s |
 | `BackgroundV` | 1 | Background wind along Z, physical m/s |
 | `ShearU` | 0 | Change in U per physical meter of height, `(m/s)/m` |
@@ -69,7 +69,7 @@ Studio has not been run in this development environment.
    place has no floor or SpawnLocation. Use **Play** or a test server with one
    player when syncing into an existing game place with a floor and spawn.
    Startup should identify **0.2.2-alpha**. The atmosphere starts cloud-free.
-4. Look near workspace **(0, 60, 0)** and watch
+4. Look near workspace **(0, 460, 0)** and watch
    `Workspace.WEATHERED_DEBUG_VOXELS`. Thin cloud cells should appear above the
    center and move in positive X and Z. Select a Part and press **F** to focus it
    if needed. Each default debug Part is exactly **12 × 12 × 12 studs**.
@@ -94,12 +94,15 @@ are separate future work.
 
 Both preview presets cover **2,400 × 1,200 × 2,400 physical meters**. The default
 Laptop preset is **16 × 12 × 16**, or 3,072 cells, with **Dx = Dz = 150 m** and
-**Dy = 100 m**. Its 12-stud display starts at `Vector3.new(-96, 24, -96)`, forming a
+**Dy = 100 m**. Its 12-stud display starts at `Vector3.new(-96, 424, -96)`, forming a
 192 × 144 × 192-stud box. Full retains **24 × 12 × 24**, 6,912 cells with
-**Dx = Dy = Dz = 100 m**, origin `Vector3.new(-144, 24, -144)` and a
+**Dx = Dy = Dz = 100 m**, origin `Vector3.new(-144, 424, -144)` and a
 288 × 144 × 288-stud box. The public core/controller default grid remains Full;
 the server bootstrap selects Laptop explicitly. Physical height starts at the
-model bottom, independently of workspace Y.
+model bottom, independently of workspace Y. Both display domains span Y=424–568
+studs, with cell centers at Y=430–562: 354–498 studs above terrain at Y=70.
+The 400-stud display-height increase leaves physical spacing, buoyancy,
+condensation timing, transport and the performance preset unchanged.
 
 | Quantity | Location / axis | Units |
 | --- | --- | --- |
@@ -115,7 +118,7 @@ Default preview conversion is:
 
 ```text
 worldX =  -96 + physicalX*(12/150)
-worldY =   24 + physicalY*(12/100)
+worldY =  424 + physicalY*(12/100)
 worldZ =  -96 + physicalZ*(12/150)
 ```
 
@@ -429,7 +432,10 @@ At 240 seconds, it has 33 visible cells and a peak qc of 0.000412259 kg/kg.
 From the 40-second sample to 240 seconds, its qc-weighted centroid moves
 **(405.32, 150.98, 207.45) physical meters** in (X,Y,Z), or
 **(48.64, 18.12, 24.89) display studs**. Its final display centroid is approximately
-**(56.61, 79.34, 28.41) studs** with the documented 12-stud spacing and origin.
+**(56.61, 79.34, 28.41) studs** with that revision's 12-stud spacing and historical
+display origin `Vector3.new(-144, 24, -144)`. This recorded absolute display
+position predates the current 400-stud height increase; physical measurements
+and centroid displacements are unchanged.
 Condensation and evaporation change the centroid weights, so this displacement
 does not measure a single parcel's travel.
 

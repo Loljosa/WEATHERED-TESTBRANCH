@@ -46,7 +46,7 @@ local state = SimulationController.Initialize({
 	BubbleRelativeHumidity = numericAttribute("BubbleRelativeHumidity", 0.999),
 }, {
 	CellSizeStuds = numericAttribute("CellSizeStuds", 12),
-	CloudBottomStuds = numericAttribute("CloudBottomStuds", 24),
+	CloudBottomStuds = numericAttribute("CloudBottomStuds", 424),
 	SizeX = performance.SizeX,
 	SizeY = performance.SizeY,
 	SizeZ = performance.SizeZ,

@@ -40,7 +40,7 @@ end
 local function createGrid(display: DisplayOptions?): Grid3D.Grid3D
 	local settings = display or {}
 	local cellSize = settings.CellSizeStuds or 12
-	local bottom = settings.CloudBottomStuds or 24
+	local bottom = settings.CloudBottomStuds or 424
 	local sizeX, sizeY, sizeZ = settings.SizeX or 24, settings.SizeY or 12, settings.SizeZ or 24
 	assert(finite(cellSize) and cellSize > 0, "CellSizeStuds must be finite and positive")
 	assert(finite(bottom), "CloudBottomStuds must be finite")

@@ -47,8 +47,9 @@ The default Studio **Laptop** preset contains **3,072 cells** (16 × 12 × 16), 
 physical X/Y/Z spacing of **150/100/150 meters**. The optional **Full** preset keeps
 the original 6,912 cells (24 × 12 × 24) and 100-meter spacing. Both cover the same
 2,400 × 1,200 × 2,400-meter atmosphere. The Studio preview uses
-**12 × 12 × 12-stud** debug voxels beginning at **Y=24 studs**. Physical and display
-scales are separate. The preview explicitly
+**12 × 12 × 12-stud** debug voxels spanning **Y=424–568 studs**, placing the display
+354–498 studs above terrain at Y=70. Physical and display scales are separate; the
+400-stud display-height increase does not change simulation physics. The preview explicitly
 uses a nearly saturated moist core and 2/1 m/s background wind; the core factory
 retains its zero-wind, 98% core-humidity defaults.
 
@@ -115,12 +116,14 @@ safety, saturation, phase-change water and enthalpy conservation, conservative
 Studio testing remains a separate step. Use **Run** for the isolated engine-only
 build to keep the editor camera; it has no floor or spawn. Use **Play** when syncing
 into an existing game place with a floor and spawn. Watch the server's ten-second
-diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder near **(0, 60, 0)**.
+diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder near **(0, 460, 0)**.
 Preview settings are attributes on `ServerScriptService.Weather.WeatherServer`
 in **Properties → Attributes**. `PerformancePreset` defaults to **Laptop**; changing
 it to **Full** requires stopping and restarting the test. `SimulationSpeed`
 defaults to **1** and can change live from **0.25 to 4** in Studio's server view;
 the physical timestep stays 0.25 seconds. Try **0.5** on slower hardware.
+`CloudBottomStuds` defaults to **424**; change the original Script's attribute
+while stopped and restart to adjust the display height.
 No terminal or Command Bar speed command is needed. See the
 [Studio procedure](docs/phase2-dynamics.md#studio-preview-and-controls) for cloud
 timing, wind, humidity and display settings.

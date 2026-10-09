@@ -3,7 +3,10 @@
 The server now defaults to a smaller **Laptop** preset and **1× simulation speed**.
 It retains dynamic condensation, three-dimensional winds, conservative bounded
 transport, pressure projection and the same fixed 0.25-second physical timestep.
-Debug clouds remain exact 12×12×12-stud cubes near the origin.
+Debug clouds remain exact 12×12×12-stud cubes, horizontally centered near the
+origin and displayed at Y=424–568 studs. This places the domain 354–498 studs
+above terrain at Y=70. Raising the display by 400 studs does not change the
+physical atmosphere, cloud timing or simulation cost.
 
 The main cost reduction comes from fewer horizontal cells and fewer requested
 steps per wall second. The lower-resolution result is a different discretization,
@@ -20,7 +23,7 @@ Before starting, select `ServerScriptService.Weather.WeatherServer` and open
 | `PerformancePreset` | `Laptop` | String, either `Laptop` or `Full`; stop and restart the test |
 | `SimulationSpeed` | 1 | Number, 0.25–4; editable live in the server view |
 | `CellSizeStuds` | 12 | Display spacing and cube size; stop and restart |
-| `CloudBottomStuds` | 24 | Display-domain bottom Y; stop and restart |
+| `CloudBottomStuds` | 424 | Display-domain bottom Y; stop and restart |
 | `BackgroundU` / `BackgroundV` | 2 / 1 m/s | Physical X/Z wind; stop and restart |
 | `BubbleRelativeHumidity` | 0.999 | Dimensionless moist-core humidity; stop and restart |
 
@@ -34,8 +37,10 @@ No Command Bar or terminal speed command is required.
 For the isolated engine-only Rojo build, choose **Run** to retain the editor
 camera; it contains no floor or spawn. In an existing game with a floor and spawn,
 use Play or a test server, then switch Studio to its server view to edit a running
-Script's attributes. Look near **(0, 60, 0)** and inspect
+Script's attributes. Look near **(0, 460, 0)** and inspect
 `Workspace.WEATHERED_DEBUG_VOXELS`; selecting a Part and pressing **F** focuses it.
+To change cloud height, stop the test, edit `CloudBottomStuds` on the original
+Script and restart; this setting is read once at startup.
 
 The clear Laptop initial state first develops positive qc at **10.75 simulated
 seconds**, and first crosses the debug threshold at **45.5 simulated seconds**.
@@ -57,7 +62,7 @@ native-host Lune measurements, not a measurement of your laptop or Studio FPS.
 | Physical Dx/Dy/Dz | 150/100/150 m | 100/100/100 m |
 | Physical domain, X/Y/Z | 2,400/1,200/2,400 m | 2,400/1,200/2,400 m |
 | Display cell size | 12 studs | 12 studs |
-| Display origin | (−96, 24, −96) studs | (−144, 24, −144) studs |
+| Display origin | (−96, 424, −96) studs | (−144, 424, −144) studs |
 | Display domain, X/Y/Z | 192/144/192 studs | 288/144/288 studs |
 | Maximum steps per Heartbeat | 1 | 2 |
 | Soft physics budget per Heartbeat | 8 ms | 8 ms |
@@ -67,7 +72,8 @@ native-host Lune measurements, not a measurement of your laptop or Studio FPS.
 The horizontal cell count and simulation-buffer bytes fall by approximately
 **55.55%**. Vertical resolution and physical extents are unchanged. Physical
 meters remain separate from Roblox studs; `u=X`, `v=Z`, `w=Y`. The smaller display
-box follows the reduced number of 12-stud debug cells.
+box follows the reduced number of 12-stud debug cells. Both presets span
+Y=424–568 studs, with vertical cell centers at Y=430–562.
 
 The budget is **soft**: a numerical step is indivisible and may take longer than
 8 ms. The controller checks elapsed time before beginning a second catch-up

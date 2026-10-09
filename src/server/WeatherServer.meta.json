@@ -6,7 +6,7 @@
     "ShearV": 0,
     "BubbleRelativeHumidity": 0.999,
     "CellSizeStuds": 12,
-    "CloudBottomStuds": 24,
+    "CloudBottomStuds": 424,
     "SimulationSpeed": 1,
     "PerformancePreset": "Laptop"
   }

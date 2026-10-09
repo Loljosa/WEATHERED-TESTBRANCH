@@ -344,7 +344,7 @@ local controllerRoot, loadControllerModule = createLoader("src/server/Simulation
 local controller = loadControllerModule(controllerRoot.SimulationController)
 local previewGrid = controller.GetGrid()
 near(previewGrid.CellSize, 12, 0, "Controller defaults to 12-stud preview cells")
-near(previewGrid.Origin.Y, 24, 0, "Controller defaults to a 24-stud model bottom")
+near(previewGrid.Origin.Y, 424, 0, "Controller defaults to a 424-stud display bottom")
 near(previewGrid.Dx, 100, 0, "Preview display size preserves the 100-meter physical grid")
 local controllerState = controller.Initialize({ BackgroundU = 0.5, BackgroundV = 0.25 })
 check(controller.Initialize() == controllerState, "Controller Initialize is idempotent")
