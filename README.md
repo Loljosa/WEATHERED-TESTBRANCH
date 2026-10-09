@@ -1,63 +1,102 @@
 <p align="center">
-  <img src="assets/weathered-logo.png" alt="WEATHERED logo" width="1100">
-</p>
-
-<h1 align="center">WEATHERED</h1>
-
-<p align="center"><strong>Survival beneath a changing sky.</strong></p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-Roblox-393B3D" alt="Platform: Roblox">
-  <img src="https://img.shields.io/badge/Language-Luau-00A6A6" alt="Language: Luau">
-  <img src="https://img.shields.io/badge/Status-Early%20Development-D6A652" alt="Status: Early development">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-628B57" alt="License: MIT"></a>
+  <img src="assets/weathered-logo.png" alt="WEATHERED — survival beneath a changing sky" width="1000">
 </p>
 
 <p align="center">
-  <a href="#quick-start">Get started</a> ·
-  <a href="#studio-cloud-controls">Cloud controls</a> ·
-  <a href="#validation">Validation</a> ·
-  <a href="#documentation">Documentation</a>
+  <strong>Survival beneath a changing sky.</strong><br>
+  A Roblox survival project with an atmosphere that evolves from the inside out.
 </p>
 
-## About WEATHERED
+<p align="center">
+  <img src="https://img.shields.io/badge/ROBLOX-393B3D?style=flat-square&logo=roblox&logoColor=white" alt="Roblox">
+  <img src="https://img.shields.io/badge/LUAU-00A6A6?style=flat-square" alt="Luau">
+  <img src="https://img.shields.io/badge/PHASE_2-3D_DYNAMICS-d6a652?style=flat-square" alt="Phase 2: 3D dynamics">
+  <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/commits/main"><img src="https://img.shields.io/github/last-commit/Loljosa/WEATHERED-TESTBRANCH?style=flat-square&color=628b57" alt="Latest repository commit"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-628b57?style=flat-square" alt="MIT license"></a>
+</p>
 
-**WEATHERED** is a Roblox survival project built around an evolving atmosphere.
-Its long-term goal is weather that shapes visibility, movement, vegetation and
-survival through a shared, server-authoritative simulation.
+<p align="center">
+  <a href="#the-project">Explore</a> &nbsp;·&nbsp;
+  <a href="#launch-the-atmosphere">Build &amp; run</a> &nbsp;·&nbsp;
+  <a href="#take-control-of-the-sky">Cloud controls</a> &nbsp;·&nbsp;
+  <a href="#development-activity">Activity</a> &nbsp;·&nbsp;
+  <a href="#field-notes">Documentation</a>
+</p>
+
+---
+
+## The project
+
+**WEATHERED** is being built around a simple idea: weather should shape the world
+you survive in. Wind, visibility, vegetation and future storms will share one
+server-authoritative atmospheric field.
 
 This repository develops the weather engine independently of the larger game.
-It contains a **CM1-inspired warm-cloud model written natively in Luau** and an
-isolated Studio test place. Clouds start as clear, warm/moist air: buoyancy,
-transport and saturation produce cloud water, which the debug renderer displays.
+The current **CM1-inspired warm-cloud prototype** runs natively in Luau. Clouds
+begin as clear, warm/moist air; their water forms through saturation and
+condensation. The visible voxels are a diagnostic view of that simulation.
 
-**The atmospheric field is authoritative.** Cloud visuals represent its state;
-future gameplay services will sample the field for wind, rain and visibility.
+<table>
+<tr>
+<td width="33%" valign="top">
+<h3>Dynamic clouds</h3>
+Warm/moist air rises, moves, condenses and evaporates. Cloud water starts at zero.
+</td>
+<td width="33%" valign="top">
+<h3>A moving atmosphere</h3>
+3D transport and live wind controls move the field. The source deforms as it evolves.
+</td>
+<td width="33%" valign="top">
+<h3>A practical preview</h3>
+Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
+</td>
+</tr>
+</table>
 
-| Current development snapshot | Status |
+<p align="center">
+  <picture>
+    <source media="(max-width: 600px)" srcset="assets/readme/engine-at-a-glance-mobile.svg">
+    <img src="assets/readme/engine-at-a-glance.svg" alt="Engine 0.2.4-alpha; fixed 0.25-second steps; 3,072 cells in the Laptop preset; 12-stud debug voxels" width="1000">
+  </picture>
+</p>
+
+### From clear air to a cloud
+
+<p align="center">
+  <picture>
+    <source media="(max-width: 600px)" srcset="assets/readme/cloud-lifecycle-mobile.svg">
+    <img src="assets/readme/cloud-lifecycle.svg" alt="Warm and moist source → buoyancy and 3D transport → saturation and phase conversion → visible cloud-water field" width="1000">
+  </picture>
+</p>
+
+**The field drives the visuals.** Future gameplay will sample atmospheric state
+for wind, rain and visibility. Cloud Parts are a debug renderer, not gameplay
+collision objects.
+
+| Where the project stands | Current scope |
 | --- | --- |
-| Engine | `0.2.4-alpha` · Phase 2: 3D atmospheric dynamics |
-| Cloud formation | Condensation and evaporation with latent heating/cooling |
-| Cloud movement | 3D field transport and live horizontal wind controls |
-| Preview controls | Source shape/size, formation presets, playback, pause and reset |
-| Visualization | Pooled debug voxels; 12 × 12 × 12 studs |
-| Verification | Lune tests and Rojo builds; Studio remains a separate manual test |
+| **Implemented** | Warm-cloud phase conversion, latent heating, 3D transport, buoyancy and pressure projection |
+| **Available in Studio** | Live wind, source shape/size, formation presets, playback, pause and reset |
+| **Verified by CLI** | Production-module Lune tests and Rojo builds |
+| **Next** | Studio profiling and sustained cloud development with explicit budgets |
 
-## Quick start
+## Launch the atmosphere
 
-Install Git, Node.js/npm, [Rokit](https://github.com/rojo-rbx/rokit) and Roblox
-Studio. Rokit provides the repository's pinned **Rojo 7.7.1** and **Lune 0.10.5**;
-npm supplies StyLua for formatting. The Studio Rojo plugin is optional for live
-sync; opening a built place does not require it.
+You need Git, Node.js/npm, [Rokit](https://github.com/rojo-rbx/rokit) and Roblox
+Studio. The toolchain pins **Rojo 7.7.1** and **Lune 0.10.5**. Use the Rojo CLI;
+the VS Code Rojo extension is unnecessary.
 
-For a new checkout:
+<details>
+<summary><strong>Starting with a new checkout?</strong></summary>
 
 ```bash
 git clone https://github.com/Loljosa/WEATHERED-TESTBRANCH.git
 cd WEATHERED-TESTBRANCH
 ```
 
-From your existing repository folder:
+</details>
+
+From your repository terminal:
 
 ```bash
 rokit install
@@ -66,67 +105,67 @@ mkdir -p build
 rojo build default.project.json -o build/WEATHERED.rbxlx
 ```
 
-Open `build/WEATHERED.rbxlx` in Studio and choose **Run** to retain the editor
-camera. The isolated engine place has no terrain, floor or spawn. In your existing
-game place, use **Play** and switch Studio to the **server** view for controls.
-Generated builds are ignored by Git.
+Open the built place in Studio and choose **Run** to keep the editor camera.
+This isolated test place has no terrain, floor or spawn. For an existing game
+place, use **Play** and switch to the **server** view for controls.
 
-### See your first cloud
+1. Open **Output**. The Laptop preview starts clear; diagnostics print every ten
+   wall seconds.
+2. Look near **(0, 470, 0)**. The default cloud first crosses the visible threshold
+   at **23.75 simulated seconds**: roughly 24 wall seconds at 1x if the server
+   keeps up, plus up to one second of renderer delay.
+3. Expand `Workspace.WEATHERED_DEBUG_VOXELS`, select a visible Part and press
+   **F** to focus it.
 
-1. Keep **Output** open. The default Laptop preview begins clear and prints
-   simulation time and diagnostics every ten wall seconds.
-2. Look near **(0, 470, 0)**. Cloud water first crosses the visible threshold at
-   **23.75 simulated seconds** with the default settings. At 1x, that is roughly
-   24 wall seconds if the server keeps up, plus up to one second of render delay.
-3. Expand `Workspace.WEATHERED_DEBUG_VOXELS`. When a Part appears, select it and
-   press **F** to focus the camera.
-4. Open the cloud controls below to change movement, try another starting source
-   or advance the atmosphere toward a developed cloud.
+<details>
+<summary><strong>Prefer live sync?</strong></summary>
 
-## Studio cloud controls
+```bash
+rojo serve default.project.json
+```
 
-Select `ServerScriptService.Weather.WeatherServer` and open **Properties →
-Attributes**. While the test is running, enter one command at a time in the
-**WeatherCommand** String attribute and press Enter. It clears itself so you can
-repeat commands; **LastWeatherMessage** and Output show the response.
+Connect the [Studio Rojo plugin](https://rojo.space/docs/v7/getting-started/installation/)
+to the CLI server. Studio must be able to reach the forwarded Rojo port when the
+server runs in a Codespace. The Studio plugin is only needed for live sync;
+building and opening a place works without it.
 
-| Command | What it does |
+</details>
+
+## Take control of the sky
+
+During the test, select `ServerScriptService.Weather.WeatherServer`. In
+**Properties → Attributes**, enter one command in **WeatherCommand** and press
+Enter. The attribute clears after each command; **LastWeatherMessage** and
+Output show the response.
+
+| Try this | Result |
 | --- | --- |
-| `spawn Wide Fast` | Start a broad warm/moist source using the faster formation preset |
-| `spawn Tower Fast` | Start a taller source using the faster formation preset |
-| `spawn Round Normal` | Start the default rounded source |
-| `size 1.25` | Scale the starting source's radii; supported range 0.5–1.5 |
-| `wind 8 2` | Change live background X/Z wind to 8/2 physical m/s |
-| `wind -8 -2` | Reverse horizontal wind while retaining the existing cloud |
-| `form 60` | Queue 60 seconds of real model evolution with temporarily increased playback |
-| `condensation Fast` | Restart the current shape/size with faster warm/moist formation conditions |
-| `speed 1` | Set normal playback; supported range 0.25–4 |
-| `pause` / `resume` | Hold the atmosphere for inspection or continue evolving |
-| `reset` | Restart the current source and wind settings |
-| `status` / `help` | Print diagnostics or the command list |
+| `spawn Wide Fast` | Restart with a broad warm/moist source and faster formation conditions |
+| `spawn Tower Fast` | Restart with a taller source; measured first visibility at 17 simulated seconds under 8/2 m/s wind |
+| `wind 8 2` / `wind -8 -2` | Move or reverse the existing cloud with X/Z background wind, in physical m/s |
+| `form 60` | Queue 60 seconds of real evolution at temporarily increased playback |
+| `size 1.25` / `condensation Fast` | Restart with a larger source or faster warm/moist conditions |
+| `speed 0.5` / `speed 1` | Reduce requested physics work or return to normal playback |
+| `pause` / `resume` | Inspect a paused atmosphere or continue evolving |
+| `reset` / `status` / `help` | Restart, inspect diagnostics or list commands |
 
-**Spawn, size, condensation and reset replace the atmosphere.** They restart from
-clear air and reset simulation time. Wind changes preserve the existing cloud.
-Shape and size describe the initial warm/moist source, which deforms as the
-atmosphere evolves; voxel dimensions remain 12 studs.
+**Spawn, size, condensation and reset replace the atmosphere.** Wind preserves
+the existing cloud. Shape describes the starting source, not a rigid final cloud;
+all sources begin with zero cloud water.
 
-Fast uses an 8 K potential-temperature excess and RH 0.9999. Saturation adjustment
-still determines phase conversion. Form temporarily requests at least 2x playback,
-keeps the fixed 0.25-second timestep and frame work limits, then restores your
-selected speed. Faster playback and larger sources can cost more CPU.
+A preview sequence: **`spawn Wide Fast` → `wind 8 2` → `form 60`**.
+Motion appears as changing occupancy of the fixed voxel grid. Faster playback
+requests more CPU work and cannot guarantee faster wall-clock results.
+See [Cloud controls](docs/cloud-controls.md) for every range and the server API.
 
-For a quick preview, try **`spawn Wide Fast` → `wind 8 2` → `form 60`**.
-The measured Tower/Fast source becomes visible at **17 simulated seconds** under
-8/2 m/s wind. Cloud motion appears as changing occupancy of the fixed voxel grid.
+## Inside the model
 
-See [the cloud controls guide](docs/cloud-controls.md) for command ranges, the
-server Command Bar API, measured formation times and restart behavior.
+The physics uses packed float32 fields and reusable scratch buffers. Debug Parts
+update at a lower frequency than physics; the simulation always uses a fixed
+**0.25-second timestep**.
 
-## Preview presets and units
-
-The default **Laptop** preset is the starting point for slower hardware. Keep
-`SimulationSpeed` at **1**, or try **0.5** to reduce requested physics work. Change
-`PerformancePreset` on the original Script while stopped, then restart.
+<details>
+<summary><strong>Performance presets, display height and physical units</strong></summary>
 
 | Setting | Laptop · default | Full · optional |
 | --- | ---: | ---: |
@@ -134,104 +173,88 @@ The default **Laptop** preset is the starting point for slower hardware. Keep
 | Cells | 3,072 | 6,912 |
 | Physical spacing, X/Y/Z | 150/100/150 m | 100/100/100 m |
 | Physical domain, X/Y/Z | 2,400/1,200/2,400 m | 2,400/1,200/2,400 m |
-| Debug update rate | 1 Hz | 2 Hz |
-| Maximum physics steps per Heartbeat | 1 | 2 |
-| Requested playback speed | 1x | 1x |
+| Debug refresh | 1 Hz | 2 Hz |
+| Maximum steps per Heartbeat | 1 | 2 |
 
-Both presets use a soft **8 ms catch-up budget**. A single physics step is
-indivisible and can exceed that budget; excess backlog is reported as dropped
-simulation time. Native-host benchmarks do not establish your laptop's Studio FPS.
+Keep the Laptop preset for slower hardware. Change `PerformancePreset` while
+stopped, then restart. Both presets have a soft **8 ms catch-up budget**: an
+individual step can exceed it, and excess backlog is reported as dropped
+simulation time. Native-host benchmarks do not establish Studio FPS.
 
-**Roblox studs and physical meters are separate scales.** The 12-stud display
-cells span **Y424–568**, controlled by `CloudBottomStuds=424`. In an existing place
-with terrain near Y70, this places the display 354–498 studs above that terrain.
-Changing display height does not change pressure, temperature or physical spacing.
-Wind axes are **u=X, v=Z, w=Y**, measured in physical m/s.
+Display cells are **12 × 12 × 12 studs**, spanning **Y424–568**. With terrain near
+Y70, that is 354–498 studs above the terrain. `CloudBottomStuds` changes display
+height without changing physical temperature, pressure or cell spacing.
 
-Before starting, `CloudShape`, `CloudScale`, `BackgroundU/V`, `ShearU/V`,
-`BubbleRelativeHumidity` and `BubbleTemperaturePerturbation` configure the source.
-The Studio default is Round, scale 1, wind 2/1 m/s, a 6 K bubble and RH 0.999.
-The core factory retains its scientific zero-wind, 2 K and RH 0.98 defaults.
-See [Laptop performance](docs/laptop-performance.md) for settings and profiling.
+Wind axes are **u=X, v=Z, w=Y**, in physical m/s. Roblox studs and atmospheric
+meters are separate scales. Studio starts with a Round source at scale 1,
+2/1 m/s wind, 6 K potential-temperature excess and RH 0.999. The core factory
+retains its zero-wind, 2 K and RH 0.98 scientific defaults.
 
-## How the atmosphere works
+</details>
 
-| System | Current implementation |
+<details>
+<summary><strong>Numerical architecture and current limits</strong></summary>
+
+| Component | Implementation |
 | --- | --- |
-| Packed state | Eight float32 buffer fields: `u`, `v`, `w`, `theta`, `qv`, `qc`, `qr`, `pressure` |
+| State | Eight float32 buffers: `u`, `v`, `w`, `theta`, `qv`, `qc`, `qr`, `pressure` |
 | Thermodynamics | Potential temperature, hydrostatic absolute pressure and liquid-water saturation |
 | Microphysics | Coupled condensation/evaporation, latent heat and float32 water accounting |
 | Momentum | Staggered MAC winds, buoyancy, drag and viscosity |
-| Pressure correction | Boussinesq projection with convergence and divergence diagnostics |
-| Transport | Bounded conservative finite-volume flux correction with reusable scratch buffers |
+| Projection | Boussinesq pressure correction with residual and divergence checks |
+| Transport | Bounded conservative finite-volume flux correction |
 | Boundaries | Periodic X/Z; sealed top and bottom |
-| Rendering | Reusable cloud-water Part pool at diagnostic frequency |
 
-The model uses a **constant-density approximation**. Water diagnostics are
-unweighted mixing-ratio sums, rather than density-weighted physical mass.
-Projection correction is separate from the absolute thermodynamic pressure field.
-The coupled timestep remains first order even though scalar transport uses a
-higher-accuracy bounded scheme. Precipitation fallout, terrain feedback and
-sustained surface forcing are future work.
+The model assumes constant density. Water diagnostics are unweighted mixing-ratio
+sums, not density-weighted physical mass. Projection correction is separate from
+absolute thermodynamic pressure. The coupled timestep remains first order.
+Precipitation fallout, terrain feedback and sustained surface forcing are future
+work. Detailed equations and diagnostic measurements live in
+[Phase 2 dynamics](docs/phase2-dynamics.md).
 
-## Validation
+</details>
 
-Format and run the short production-module checks during routine development:
+## Validate a change
 
 ```bash
 npx stylua src scripts tests
 npx stylua --check src scripts tests
 lune run scripts/test-atmosphere.luau --quick
+rojo build default.project.json -o build/WEATHERED.rbxlx
 git diff --check
 ```
 
-| Command | Scope |
+The quick suite runs production modules for mathematics, transport, projection,
+controls and bootstrap wiring. Use `--preview-only` for two 240-second preview
+trajectories and a matched formation comparison; omit flags for the complete
+six-scenario long-run matrix. Run `lune run scripts/benchmark-atmosphere.luau`
+separately from expensive tests.
+
+At `0.2.4-alpha`, focused validation passed **886,410 checks**; the quick suite
+passed **72,458**. These are numerical and wiring checks. Graphics and gameplay
+performance need the [manual Studio test](docs/phase2-dynamics.md#exact-studio-test).
+
+## Field notes
+
+| Guide | What you will find |
 | --- | --- |
-| `lune run scripts/test-atmosphere.luau --quick` | Mathematics, transport/projection, failure handling, controls, renderer and bootstrap wiring |
-| `lune run scripts/test-atmosphere.luau --preview-only` | Short checks plus two 240-second preview trajectories and a matched formation comparison |
-| `lune run scripts/test-atmosphere.luau` | Complete six-scenario long-run matrix and short checks |
-| `lune run scripts/benchmark-atmosphere.luau` | Native-host Laptop/Full comparison; run separately from expensive tests |
-
-At `0.2.4-alpha`, focused validation passed **886,410 checks**, including the default
-Laptop trajectory and a Wide/Fast cloud with live wind reversal. The short suite
-passed **72,458 checks**. These tests use real production modules and check
-indexing, geometry, finiteness, moisture bounds, water/enthalpy accounting,
-conservative fluxes, pressure convergence, fixed timesteps and command behavior.
-
-Studio graphics and gameplay performance require a separate manual test.
-See the [complete Studio procedure](docs/phase2-dynamics.md#exact-studio-test).
-
-### Live sync with Rojo
-
-```bash
-rojo serve default.project.json
-```
-
-Connect the [Studio Rojo plugin](https://rojo.space/docs/v7/getting-started/installation/)
-to the CLI server. When using a Codespace, Studio must be able to reach its
-forwarded Rojo port. This workflow uses the CLI; the VS Code Rojo extension is
-unnecessary.
-
-## Documentation
-
-| Guide | Read it for |
-| --- | --- |
-| [Cloud controls](docs/cloud-controls.md) | Shape/size, live wind, formation commands and measured moving-cloud results |
-| [Laptop performance](docs/laptop-performance.md) | Presets, frame work limits, benchmark caveats and Studio settings |
-| [Phase 2 dynamics](docs/phase2-dynamics.md) | Equations, boundaries, units, numerical assumptions and diagnostics |
+| [Cloud controls](docs/cloud-controls.md) | Source shapes, live wind, formation and measured moving-cloud behavior |
+| [Laptop performance](docs/laptop-performance.md) | Presets, work limits, profiling and Studio settings |
+| [Phase 2 dynamics](docs/phase2-dynamics.md) | Equations, boundaries, units, conservation and solver diagnostics |
 | [Phase 1 reference](docs/dynamic-cloud.md) | The earlier vertical-only warm-cloud prototype |
+| [Activity calendar setup](docs/readme-metrics.md) | Snapshot provenance and optional lowlighter/metrics automation |
 
 <details>
-<summary><strong>Repository layout</strong></summary>
+<summary><strong>Repository map</strong></summary>
 
 ```text
-assets/                   WEATHERED branding
+assets/                   Branding and README visuals
 src/
 ├── shared/Atmosphere/
-│   ├── Core/             Grid, physical geometry, staggered faces and packed state
+│   ├── Core/             Geometry, staggered faces and packed state
 │   ├── Thermodynamics/   Sounding, temperature conversion and saturation
 │   ├── Microphysics/     Warm-cloud phase conversion
-│   ├── Dynamics/         Momentum, projection and conservative 3D transport
+│   ├── Dynamics/         Momentum, projection and 3D transport
 │   ├── Utilities/        State validation
 │   ├── Simulation.lua    Simulation ownership and stepping
 │   └── init.lua          Public atmosphere entry point
@@ -243,31 +266,46 @@ src/
     └── WeatherClient.client.lua
 
 docs/                     Physics notes and Studio instructions
-scripts/                  CLI validation and benchmarks
+scripts/                  CLI tests and benchmarks
 tests/                    Production-module tests and Roblox lookup adapters
+.github/workflows/        Optional activity-calendar refresh
 ```
 
 </details>
 
-## Roadmap
+## The next horizon
 
-1. Profile the model in Studio and refine transport/solver cost while preserving
-   numerical bounds and diagnostics.
-2. Add controlled surface forcing and sustained cloud development with explicit
-   water and energy budgets.
-3. Expose atmospheric sampling and adapters for wind, precipitation and visibility
-   in the larger survival game's existing systems.
-4. Build precipitation, terrain interaction and storm lifecycle on that foundation.
-5. Develop field-driven cloud clustering, client rendering and LOD after the
-   simulation is ready to support them.
+- [x] Establish a clear-air warm-cloud model with natural condensation.
+- [x] Add conservative 3D transport and validated pressure projection.
+- [x] Add moving-cloud controls and a smaller Laptop preview.
+- [ ] Profile in Studio and improve transport/solver cost.
+- [ ] Sustain cloud development through controlled surface forcing and budgets.
+- [ ] Expose sampling services for existing survival gameplay systems.
+- [ ] Add precipitation, terrain interaction and storm lifecycle.
+- [ ] Develop field-driven client cloud rendering and LOD.
 
-## Development principles
+Core modules stay `--!strict`, with documented units, packed fields and reusable
+storage. Changes should preserve working inventory, crafting, movement and world
+systems while keeping simulation and rendering independent.
 
-Use `--!strict` for core/simulation modules, document units, retain packed fields
-and reuse scratch storage. Keep physics independent from rendering and validate
-numerical behavior before adding model complexity. Make focused changes that
-preserve working systems and existing gameplay.
+## Development activity
 
-## License
+<p align="center">
+  <a href="https://github.com/Loljosa"><img src="assets/metrics/isocalendar.svg" alt="Loljosa GitHub contribution calendar; dated public-activity snapshot until automated refresh is enabled" width="840"></a>
+</p>
 
-WEATHERED is licensed under the [MIT License](LICENSE).
+**39GUN · GitHub account: [Loljosa](https://github.com/Loljosa).** This calendar
+covers account-wide GitHub contributions, not only WEATHERED commits.
+The initial image is a dated public-data snapshot. The optional workflow replaces
+it with a full-year [lowlighter/metrics](https://github.com/lowlighter/metrics)
+isocalendar after you configure `METRICS_TOKEN`.
+[Enable automatic refresh](docs/readme-metrics.md).
+
+---
+
+<p align="center">
+  <strong>WEATHERED</strong> · Made for Roblox · Built in Luau<br>
+  <a href="LICENSE">MIT License</a> ·
+  <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/issues">Issues &amp; feedback</a> ·
+  <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/commits/main">Development history</a>
+</p>

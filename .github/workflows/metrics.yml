@@ -1,0 +1,48 @@
+name: README contribution calendar
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: readme-contribution-calendar
+  cancel-in-progress: false
+
+jobs:
+  isocalendar:
+    if: github.repository == 'Loljosa/WEATHERED-TESTBRANCH'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+    steps:
+      - name: Keep the bundled snapshot until updates are configured
+        if: env.METRICS_TOKEN == ''
+        run: |
+          echo "The README keeps its bundled contribution snapshot. To enable updates, add the optional METRICS_TOKEN repository secret; see docs/readme-metrics.md." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Render Loljosa's full-year contribution calendar
+        if: env.METRICS_TOKEN != ''
+        # Metrics 3.34.0; pin the action source and build that source on the runner.
+        uses: lowlighter/metrics@65836723097537a54cd8eb90f61839426b4266b6
+        with:
+          token: ${{ secrets.METRICS_TOKEN }}
+          committer_token: ${{ github.token }}
+          committer_branch: main
+          committer_message: "docs: refresh contribution calendar [skip ci]"
+          filename: assets/metrics/isocalendar.svg
+          user: Loljosa
+          template: classic
+          base: ""
+          plugin_isocalendar: "yes"
+          plugin_isocalendar_duration: full-year
+          config_timezone: Etc/UTC
+          config_animations: "no"
+          plugins_errors_fatal: "yes"
+          output_action: commit
+          output_condition: data-changed
+          use_prebuilt_image: "no"
