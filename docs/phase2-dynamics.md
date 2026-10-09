@@ -2,8 +2,9 @@
 
 Phase 2 combines staggered winds, a pressure projection and conservative scalar
 transport. This revision improves scalar accuracy, pressure-solver cost,
-float32 phase conversion and failed-step isolation. The current 0.2.2-alpha
-bootstrap adds a Laptop preset and bounded frame work. Cloud water still comes
+float32 phase conversion and failed-step isolation. The current 0.2.3-alpha
+bootstrap retains the Laptop preset and bounded frame work, with a stronger
+6 K warm bubble for earlier visible cloud development. Cloud water still comes
 from condensation of an initially clear warm/moist perturbation.
 
 The Studio bootstrap uses a compact preview above normal terrain. Its debug Parts represent
@@ -26,13 +27,16 @@ before starting the test:
 | `ShearU` | 0 | Change in U per physical meter of height, `(m/s)/m` |
 | `ShearV` | 0 | Change in V per physical meter of height, `(m/s)/m` |
 | `BubbleRelativeHumidity` | 0.999 | Relative humidity of the warm/moist core, dimensionless |
+| `BubbleTemperaturePerturbation` | 6 | Peak warm-bubble potential-temperature excess, K |
 | `SimulationSpeed` | 1 | Requested simulated seconds per wall second |
 
 All values except `SimulationSpeed` are read once at startup. Stop the test, change
 the original Script's attributes and restart to change initial conditions.
 The core factory retains its scientific defaults: zero wind and perturbation
-relative humidity 0.98. The preview's wetter core and 2/1 m/s wind are explicit
-bootstrap settings.
+relative humidity 0.98 and a 2 K warm bubble. The preview's wetter core, 6 K
+bubble and 2/1 m/s wind are explicit bootstrap settings. The larger thermal
+perturbation changes the initial buoyancy and reaches saturation earlier; it
+does not multiply the condensation rate or seed qc.
 
 `SimulationSpeed` can also change during a test, between **0.25 and 4**. In Play,
 switch Studio to its server view; select the running Script and edit that Number
@@ -68,7 +72,7 @@ Studio has not been run in this development environment.
    without an avatar, and the editor camera remains available. This engine-only
    place has no floor or SpawnLocation. Use **Play** or a test server with one
    player when syncing into an existing game place with a floor and spawn.
-   Startup should identify **0.2.2-alpha**. The atmosphere starts cloud-free.
+   Startup should identify **0.2.3-alpha**. The atmosphere starts cloud-free.
 4. Look near workspace **(0, 460, 0)** and watch
    `Workspace.WEATHERED_DEBUG_VOXELS`. Thin cloud cells should appear above the
    center and move in positive X and Z. Select a Part and press **F** to focus it
@@ -76,7 +80,10 @@ Studio has not been run in this development environment.
 5. Compare the diagnostics' **simulation time** with measured cloud timing below.
    The debug threshold is `qc >= 0.00005 kg/kg`. Wall time depends on speed and
    whether the server can keep up. The Laptop preset first reaches this threshold
-   at **45.5 simulated seconds**, about 46 wall seconds at 1× if the server keeps up.
+   at **23.75 simulated seconds**, about 24 wall seconds at 1× if the server keeps up.
+   This is about 48% earlier than the previous 2 K preview's 45.5-second onset.
+   To change the bubble, stop the test, edit `BubbleTemperaturePerturbation` on the
+   original Script and restart.
 6. Select the running Script (switch to server view in Play), and change its
    `SimulationSpeed` from 1 to 0.5. Confirm the speed diagnostic changes,
    physical dt stays 0.25 s, and
@@ -144,8 +151,8 @@ scalar and U/V/W buffers after stepping because reusable buffers swap ownership.
 ## Step ownership and failure behavior
 
 `Atmosphere.new(grid, config?)` owns one simulation. Configuration includes
-wind/shear, `BubbleRelativeHumidity`, `MomentumOptions`, `ProjectionOptions` and
-`TransportOptions`. `TransportOptions.Scheme` selects `FCT` or `Upwind`; the
+wind/shear, `BubbleRelativeHumidity`, `BubbleTemperaturePerturbation`,
+`MomentumOptions`, `ProjectionOptions` and `TransportOptions`. `TransportOptions.Scheme` selects `FCT` or `Upwind`; the
 Studio bootstrap uses the FCT default. The controller
 initializes once; later initialization calls return the existing simulation.
 Geometry, candidate storage, fluxes and solver work vectors are allocated once.
@@ -362,7 +369,7 @@ npx stylua src
 npx stylua --check src scripts tests
 mkdir -p build
 set -o pipefail
-lune run scripts/test-atmosphere.luau | tee build/phase2-validation.log
+lune run scripts/test-atmosphere.luau --preview-only | tee build/fast-preview-validation.log
 rojo build default.project.json -o build/WEATHERED.rbxlx
 git diff --check
 git status --short --branch
@@ -371,18 +378,24 @@ git status --short --branch
 The production-module loader runs core/buffer checks, manufactured projection,
 scalar accuracy/conservation/bounds, stationary coupled phase checks,
 transactional failures and controller speed/fixed-step tests. Full scenarios
-cover scientific defaults, prior weak wind, strong wind/shear and both Studio
-presets. Renderer and execution-budget tests use the actual server modules.
-Reports are written to ignored `build/phase2-validation.json` and logged stdout.
+cover scientific defaults, prior weak wind, strong wind/shear, the legacy 2 K
+Full-grid preview and the current 6 K Laptop preview when the script runs without
+options. Renderer and execution-budget tests use the actual server modules. The current `--preview-only` validation
+retains all short checks and runs the 240-second Laptop trajectory with the
+new 6 K startup condition, passing **867,987 checks**. It writes ignored
+`build/fast-preview-validation.json` and `build/laptop-validation.json` with
+source/test fingerprints and logged stdout.
 
 The shorter `lune run scripts/test-atmosphere.luau --quick` suite includes all six
 advection directions, scalar species budgets/bounds, three failed-step
 rollback/retry stages, live speed/display configuration and laptop execution
 controls. Current laptop results and reproducible benchmark instructions are
-recorded in [Laptop performance](laptop-performance.md). The current full suite
-passes **8,166,682 checks** across five 240-second scenarios; quick validation
-passes **56,409 checks**. `build/phase2-validation.json` contains the four Full-grid
-scenarios and `build/laptop-validation.json` contains the Laptop scenario.
+recorded in [Laptop performance](laptop-performance.md). The full suite
+previously passed **8,166,682 checks** across five 240-second scenarios at
+0.2.2-alpha with a 2 K preview. Current quick validation passes **56,921 checks**.
+The earlier `build/phase2-validation.json` is retained as historical data for
+the four Full-grid trajectories; the current focused report validates the changed
+Laptop startup without repeating those unchanged 240-second cases.
 
 ### Full-grid rework measurements at 1d550d3
 

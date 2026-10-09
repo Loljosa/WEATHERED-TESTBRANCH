@@ -44,6 +44,7 @@ local state = SimulationController.Initialize({
 	ShearU = numericAttribute("ShearU", 0),
 	ShearV = numericAttribute("ShearV", 0),
 	BubbleRelativeHumidity = numericAttribute("BubbleRelativeHumidity", 0.999),
+	BubbleTemperaturePerturbation = numericAttribute("BubbleTemperaturePerturbation", 6),
 }, {
 	CellSizeStuds = numericAttribute("CellSizeStuds", 12),
 	CloudBottomStuds = numericAttribute("CloudBottomStuds", 424),

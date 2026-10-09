@@ -23,6 +23,7 @@ export type Config = {
 	ShearU: number?,
 	ShearV: number?,
 	BubbleRelativeHumidity: number?,
+	BubbleTemperaturePerturbation: number?,
 	MomentumOptions: Momentum.Options?,
 	ProjectionOptions: Projection.Options?,
 	TransportOptions: Transport.Options?,
@@ -115,6 +116,7 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 		ShearU = settings.ShearU,
 		ShearV = settings.ShearV,
 		BubbleRelativeHumidity = settings.BubbleRelativeHumidity,
+		BubbleTemperaturePerturbation = settings.BubbleTemperaturePerturbation,
 	})
 	local geometry = Geometry.new(grid)
 	local faces = FaceVelocity.new(geometry)

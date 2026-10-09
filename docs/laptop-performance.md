@@ -1,8 +1,12 @@
-# Laptop performance: 0.2.2-alpha
+# Laptop performance: 0.2.3-alpha
 
 The server now defaults to a smaller **Laptop** preset and **1× simulation speed**.
 It retains dynamic condensation, three-dimensional winds, conservative bounded
 transport, pressure projection and the same fixed 0.25-second physical timestep.
+The preview now starts with a stronger **6 K potential-temperature perturbation**,
+which reaches visible cloud water sooner while keeping the initial state clear.
+This changes the initial bubble; the saturation adjustment equations and requested
+step rate remain unchanged.
 Debug clouds remain exact 12×12×12-stud cubes, horizontally centered near the
 origin and displayed at Y=424–568 studs. This places the domain 354–498 studs
 above terrain at Y=70. Raising the display by 400 studs does not change the
@@ -26,6 +30,7 @@ Before starting, select `ServerScriptService.Weather.WeatherServer` and open
 | `CloudBottomStuds` | 424 | Display-domain bottom Y; stop and restart |
 | `BackgroundU` / `BackgroundV` | 2 / 1 m/s | Physical X/Z wind; stop and restart |
 | `BubbleRelativeHumidity` | 0.999 | Dimensionless moist-core humidity; stop and restart |
+| `BubbleTemperaturePerturbation` | 6 K | Peak potential-temperature excess in the warm bubble; stop and restart |
 
 Start with Laptop and speed 1. If it still disrupts gameplay, try speed **0.5**
 without restarting: this halves the requested number of fixed physical steps.
@@ -42,12 +47,17 @@ Script's attributes. Look near **(0, 460, 0)** and inspect
 To change cloud height, stop the test, edit `CloudBottomStuds` on the original
 Script and restart; this setting is read once at startup.
 
-The clear Laptop initial state first develops positive qc at **10.75 simulated
-seconds**, and first crosses the debug threshold at **45.5 simulated seconds**.
-At speed 1 these are approximately 11 and 46 wall seconds if the server keeps up;
-at speed 0.5 they take approximately 22 and 91 seconds. Render cadence adds up to
-one second before a newly visible cell is displayed. Keep the Output window open
-and compare its `t` with wall time. The model reports dropped backlog if it falls
+The clear Laptop initial state first develops positive qc at **7 simulated
+seconds**, and first crosses the debug threshold at **23.75 simulated seconds**.
+The previous 2 K bubble took 45.5 simulated seconds to cross this same threshold:
+the new onset is about **48% earlier**. At speed 1 the new timing is approximately
+7 and 24 wall seconds if the server keeps up; at speed 0.5 it is approximately
+14 and 48 seconds. To tune this startup condition, stop the test, edit
+`BubbleTemperaturePerturbation` on the original Script and restart. The core
+factory keeps its scientific 2 K default. Use 2 K to reproduce the previous
+weaker bubble or 6 K for the validated faster preview. No cloud water is seeded.
+Render cadence adds up to one second before a newly visible cell is displayed.
+Keep the Output window open and compare its `t` with wall time. The model reports dropped backlog if it falls
 behind the requested rate.
 
 Studio has not been run in this development environment. The timings below are
@@ -112,12 +122,46 @@ selects the Laptop grid and the new execution limits.
 
 ## Measured costs
 
-`lune run scripts/benchmark-atmosphere.luau` uses the production modules and
+`lune run scripts/benchmark-atmosphere.luau` uses production modules and
 `PerformanceSettings.Resolve`, alternating the order of the two presets. It runs
 eight warm-up steps and 80 timed steps per preset, ending at **22 simulated
-seconds**. Both start clear with the same physical domain, background wind 2/1
-m/s and moist-core humidity 0.999. These timings describe that early trajectory,
-not a complete cloud lifetime or renderer cost.
+seconds**. It now reads the wind, humidity, temperature perturbation and display
+height from `WeatherServer.meta.json`, so the current run uses the 6 K bubble.
+The metadata and production sources are included in its source fingerprint.
+
+### Current 6 K benchmark
+
+The alternating-order comparison uses the same current startup conditions for
+both grids: background wind 2/1 m/s, humidity 0.999 and the 6 K warm bubble.
+It measures the first 22 simulated seconds, before the Laptop visibility
+threshold; it excludes debug rendering, replication and the rest of the game.
+
+| Metric | Laptop | Full |
+| --- | ---: | ---: |
+| Mean physical step | 30.507 ms | 74.735 ms |
+| Maximum physical step | 64.082 ms | 119.488 ms |
+| Mean / maximum PCG iterations | 27.11 / 28 | 37.36 / 39 |
+| Estimated physics work at 1× | 122.03 ms/wall second | 298.94 ms/wall second |
+
+For these current 6 K conditions, Laptop uses **59.18% less measured step time**
+than Full. Comparing Laptop at 1× with Full at 2× under these same conditions
+reduces estimated requested physics work by **79.59%**. This compares current
+presets and requested rates; it does not compare the old 2 K cloud trajectory
+with the new 6 K trajectory or predict a Studio FPS improvement. The estimate
+is `mean_step_ms * SimulationSpeed / 0.25`. Stronger bubble-driven flow can
+require more pressure iterations even when grid and timestep are unchanged.
+
+### Historical 2 K benchmark
+
+The paired measurements below are historical results for the previous **2 K**
+warm bubble at 0.2.2-alpha. The 6 K startup condition changes the trajectory,
+wind and pressure workload, so these numbers do not establish its step cost.
+Grid sizes, fixed dt, requested speed and owned-buffer totals are unchanged.
+
+Both recorded presets started clear with the same physical domain, background
+wind 2/1 m/s, moist-core humidity 0.999 and a 2 K warm bubble. These timings
+describe the first 22 simulated seconds, not a complete cloud lifetime or
+renderer cost.
 
 | Metric | Laptop | Full |
 | --- | ---: | ---: |
@@ -127,9 +171,9 @@ not a complete cloud lifetime or renderer cost.
 | Estimated physics work at 1× | 100.52 ms/wall second | 244.31 ms/wall second |
 | Estimated physics work at 2× | 201.04 ms/wall second | 488.62 ms/wall second |
 
-The same-host measured mean step cost is **58.86% lower** for Laptop. Combining
-that ratio with the new default speed 1 instead of the previous Full speed 2
-reduces estimated requested physics work by **79.43%** for this run. This estimate
+For that historical pair, Laptop's same-host mean step cost was **58.86% lower**.
+Combining that ratio with the speed change from Full at 2× to Laptop at 1×
+reduced estimated requested physics work by **79.43%** for that run. This estimate
 is `mean_step_ms * SimulationSpeed / 0.25`; it excludes rendering, Studio,
 replication and the rest of the game, and does not predict an FPS improvement.
 Host timings vary between runs and workloads.
@@ -148,27 +192,32 @@ to reduce CPU contention. Native benchmarks do not exercise Roblox Instances.
 ## Cloud and numerical checks
 
 The production Laptop regression runs **960 fixed steps**, or **240 simulated
-seconds**, from the startup wind/humidity conditions. It checks nonnegative,
-finite fields, pressure convergence, unchanged hydrostatic pressure, stable
-buffer ownership, total-water accounting and visible cloud movement.
+seconds**, from the startup wind, humidity and 6 K warm-bubble conditions.
+It checks nonnegative, finite fields, pressure convergence, unchanged hydrostatic
+pressure, stable buffer ownership, total-water accounting and visible cloud movement.
 
 | Laptop result at 240 simulated seconds | Measurement |
 | --- | ---: |
-| Visible cells, `qc >= 0.00005 kg/kg` | 6 |
-| Final peak qc | 0.000222844 kg/kg |
-| Final unweighted total-water sum drift | −0.00004532% |
-| Final pressure residual, RMS / maximum | 2.11×10⁻¹⁰ / 8.52×10⁻¹⁰ s⁻¹ |
+| First positive qc / first visible cell | 7 / 23.75 simulated seconds |
+| Visible cells, `qc >= 0.00005 kg/kg` | 32 |
+| Final peak qc | 0.000945690 kg/kg |
+| Final unweighted total-water sum drift | −0.00001067% |
+| Final pressure residual, RMS / maximum | 2.15×10⁻¹⁰ / 8.00×10⁻¹⁰ s⁻¹ |
 | Requested pressure residual target | 1×10⁻⁹ s⁻¹ |
-| Final committed-face divergence, RMS / maximum | 6.19×10⁻¹⁰ / 2.40×10⁻⁹ s⁻¹ |
-| Maximum PCG iterations over the run | 47 |
-| Maximum momentum/scalar Courant number | 0.00902 |
+| Final committed-face divergence, RMS / maximum | 6.28×10⁻¹⁰ / 2.78×10⁻⁹ s⁻¹ |
+| Maximum PCG iterations over the run | 50 |
+| Maximum momentum/scalar Courant number | 0.01400 |
 
 Water drift is an unweighted kg/kg sum under the model's fixed-density
 approximation; it is not a density-weighted physical mass measurement. Condensing
 and evaporating cloud weights change the qc centroid, so it is not a parcel track.
-Between **50 and 240 simulated seconds**, the qc-weighted centroid moves
-**(341.74, 117.63, 198.81) physical meters** in X/Y/Z, equivalent to approximately
-**(27.34, 14.12, 15.90) display studs** with the Laptop mapping.
+Between **30 and 240 simulated seconds**, the qc-weighted centroid moves
+**(427.14, 388.70, 199.78) physical meters** in X/Y/Z, equivalent to approximately
+**(34.17, 46.64, 15.98) display studs** with the Laptop mapping. The focused
+240-second validation averaged **41.02 ms/step** on the contended native host,
+with a maximum 336.37 ms step. It is not a matched performance comparison with
+the earlier 2 K runs and does not measure Studio FPS. The warmer bubble produces
+more visible debug Parts and stronger flow, which can require more projection work.
 Full retains more spatial detail and more visible cells. A cheaper 12×12×12,
 200-meter-horizontal trial was rejected because the useful visible cloud mostly
 disappeared by 240 seconds.
@@ -186,7 +235,7 @@ rokit install
 npm ci
 npx stylua src
 npx stylua --check src scripts tests
-lune run scripts/test-atmosphere.luau
+lune run scripts/test-atmosphere.luau --preview-only
 lune run scripts/benchmark-atmosphere.luau
 mkdir -p build
 rojo build default.project.json -o build/WEATHERED.rbxlx
@@ -194,12 +243,20 @@ git diff --check
 git status --short --branch
 ```
 
-The full test writes `build/phase2-validation.json` and
-`build/laptop-validation.json`; generated reports and place files are Git-ignored.
-The full suite passes **8,166,682 checks**, including five 240-second scenarios;
-the four Full-grid scenarios are in the first report and Laptop in the second.
-For a shorter regression pass, use `lune run scripts/test-atmosphere.luau --quick`,
-which passes **56,409 checks** without the long scenarios.
+The focused `--preview-only` run includes all short mathematics, operator, API,
+controller and renderer checks plus the current **240-second 6 K Laptop scenario**,
+passing **867,987 checks**. It writes `build/fast-preview-validation.json` and
+`build/laptop-validation.json`, including source and test fingerprints. Generated reports and place files are
+Git-ignored. For only the short checks, use
+`lune run scripts/test-atmosphere.luau --quick`, which passes **56,921 checks**.
+
+Running the test script without options still runs all five long scenarios:
+scientific baseline, weak wind, strong wind/shear, the legacy 2 K Full-grid
+preview and the current 6 K Laptop preview.
+The earlier 0.2.2-alpha full suite passed **8,166,682 checks** with the previous
+2 K preview; its Full-grid results remain historical reference data in
+`build/phase2-validation.json`, and are not a claim of rerunning the current source
+for those unchanged trajectories.
 See [Phase 2 dynamics](phase2-dynamics.md) for the numerical equations, boundaries,
 water/energy assumptions and historical full-grid measurements.
 

@@ -50,8 +50,10 @@ the original 6,912 cells (24 × 12 × 24) and 100-meter spacing. Both cover the 
 **12 × 12 × 12-stud** debug voxels spanning **Y=424–568 studs**, placing the display
 354–498 studs above terrain at Y=70. Physical and display scales are separate; the
 400-stud display-height increase does not change simulation physics. The preview explicitly
-uses a nearly saturated moist core and 2/1 m/s background wind; the core factory
-retains its zero-wind, 98% core-humidity defaults.
+uses a nearly saturated moist core, a 6 K warm-bubble potential-temperature
+perturbation and 2/1 m/s background wind. Visible cloud water first appears around
+24 simulated seconds in the Laptop preset. The core factory retains its zero-wind,
+98% core-humidity and 2 K warm-bubble defaults.
 
 ### Prototype limits
 
@@ -124,7 +126,10 @@ defaults to **1** and can change live from **0.25 to 4** in Studio's server view
 the physical timestep stays 0.25 seconds. Try **0.5** on slower hardware.
 `CloudBottomStuds` defaults to **424**; change the original Script's attribute
 while stopped and restart to adjust the display height.
-No terminal or Command Bar speed command is needed. See the
+`BubbleTemperaturePerturbation` defaults to **6 K**; change it while stopped and
+restart to tune the initial buoyancy. Cloud water still forms naturally from
+saturation rather than being seeded. No terminal or Command Bar speed command is
+needed. See the
 [Studio procedure](docs/phase2-dynamics.md#studio-preview-and-controls) for cloud
 timing, wind, humidity and display settings.
 

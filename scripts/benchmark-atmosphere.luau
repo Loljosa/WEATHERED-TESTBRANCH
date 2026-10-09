@@ -16,6 +16,16 @@ local Atmosphere = loadModule(root)
 local Grid3D = loadModule(root.Core.Grid3D)
 local settingsRoot, loadSettings = createLoader("src/server/Simulation")
 local PerformanceSettings = loadSettings(settingsRoot.PerformanceSettings)
+local startupAttributes =
+	serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
+local configuration = {
+	BackgroundU = startupAttributes.BackgroundU,
+	BackgroundV = startupAttributes.BackgroundV,
+	ShearU = startupAttributes.ShearU,
+	ShearV = startupAttributes.ShearV,
+	BubbleRelativeHumidity = startupAttributes.BubbleRelativeHumidity,
+	BubbleTemperaturePerturbation = startupAttributes.BubbleTemperaturePerturbation,
+}
 
 local WARMUP_STEPS = 8
 local TIMED_STEPS = 80
@@ -67,8 +77,11 @@ local function stateChecksum(simulation: any): string
 end
 
 local function sourceFingerprint(): string
-	local paths =
-		{ "src/server/Simulation/PerformanceSettings.lua", "tests/RobloxModuleLoader.luau" }
+	local paths = {
+		"src/server/Simulation/PerformanceSettings.lua",
+		"src/server/WeatherServer.meta.json",
+		"tests/RobloxModuleLoader.luau",
+	}
 	local function collect(directory: string)
 		for _, name in fs.readDir(directory) do
 			local path = directory .. "/" .. name
@@ -95,15 +108,15 @@ for _, preset in presets do
 		settings.SizeX,
 		settings.SizeY,
 		settings.SizeZ,
-		12,
-		Vector3.new(-settings.SizeX * 6, 24, -settings.SizeZ * 6),
+		startupAttributes.CellSizeStuds,
+		Vector3.new(
+			-settings.SizeX * startupAttributes.CellSizeStuds * 0.5,
+			startupAttributes.CloudBottomStuds,
+			-settings.SizeZ * startupAttributes.CellSizeStuds * 0.5
+		),
 		{ Dx = settings.Dx, Dy = settings.Dy, Dz = settings.Dz }
 	)
-	local simulation = Atmosphere.new(grid, {
-		BackgroundU = 2,
-		BackgroundV = 1,
-		BubbleRelativeHumidity = 0.999,
-	})
+	local simulation = Atmosphere.new(grid, configuration)
 	assert(
 		simulation:GetDiagnostics().MaxCloudWater == 0,
 		"Benchmark must start without seeded cloud water"
@@ -217,6 +230,7 @@ fs.writeFile(
 		SourceSHA256 = sourceFingerprint(),
 		Environment = "Lune native-host code generation; not Roblox Studio FPS",
 		NativeDirectiveGainMeasured = false,
+		Configuration = configuration,
 		WarmupSteps = WARMUP_STEPS,
 		TimedSteps = TIMED_STEPS,
 		FixedDt = FIXED_DT,

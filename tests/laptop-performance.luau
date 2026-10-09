@@ -8,9 +8,11 @@ local serde = require("@lune/serde")
 -- Exercise the production controller with deterministic clocks. The clock only
 -- controls scheduling; every executed production physics step remains 0.25 s.
 return function(root: any, loadModule: any, check: any, near: any, rejects: any, quick: boolean?)
+	local startup =
+		serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
 	local settingsRoot, loadSettings = createLoader("src/server/Simulation")
 	local PerformanceSettings = loadSettings(settingsRoot.PerformanceSettings)
-	local laptopSettings = PerformanceSettings.Resolve("Laptop")
+	local laptopSettings = PerformanceSettings.Resolve(startup.PerformancePreset)
 	local fullSettings = PerformanceSettings.Resolve("Full")
 	near(fullSettings.SizeX, 24, 0, "Full preset retains the previous horizontal resolution")
 	near(fullSettings.SizeY, 12, 0, "Full preset retains the previous vertical resolution")
@@ -49,21 +51,28 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 			end
 	end
 
+	local configuration = {
+		BackgroundU = startup.BackgroundU,
+		BackgroundV = startup.BackgroundV,
+		ShearU = startup.ShearU,
+		ShearV = startup.ShearV,
+		BubbleRelativeHumidity = startup.BubbleRelativeHumidity,
+		BubbleTemperaturePerturbation = startup.BubbleTemperaturePerturbation,
+	}
 	local laptop = controller()
-	local state = laptop.Initialize(
-		{ BackgroundU = 2, BackgroundV = 1, BubbleRelativeHumidity = 0.999 },
-		{
-			CellSizeStuds = 12,
-			CloudBottomStuds = 424,
-			SizeX = laptopSettings.SizeX,
-			SizeY = laptopSettings.SizeY,
-			SizeZ = laptopSettings.SizeZ,
-			Dx = laptopSettings.Dx,
-			Dy = laptopSettings.Dy,
-			Dz = laptopSettings.Dz,
-		},
-		{ MaxCatchUpSteps = 1, FrameBudgetMilliseconds = 8 }
-	)
+	local state = laptop.Initialize(configuration, {
+		CellSizeStuds = startup.CellSizeStuds,
+		CloudBottomStuds = startup.CloudBottomStuds,
+		SizeX = laptopSettings.SizeX,
+		SizeY = laptopSettings.SizeY,
+		SizeZ = laptopSettings.SizeZ,
+		Dx = laptopSettings.Dx,
+		Dy = laptopSettings.Dy,
+		Dz = laptopSettings.Dz,
+	}, {
+		MaxCatchUpSteps = laptopSettings.MaxCatchUpSteps,
+		FrameBudgetMilliseconds = laptopSettings.FrameBudgetMilliseconds,
+	})
 	local grid = laptop.GetGrid()
 	near(grid.Count, 3072, 0, "Laptop geometry reduces the previous 6912-cell atmosphere")
 	near(grid.CellSize, 12, 0, "Laptop geometry retains exact 12-stud diagnostic cubes")
@@ -80,6 +89,71 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		check(wx == x and wy == y and wz == z, "Laptop display coordinates round trip")
 		near(state:Get("qc", index), 0, 0, "Laptop initialization never paints cloud water")
 	end
+
+	-- Test the public factory rather than duplicating the sounding equations.
+	-- The scientific default remains the legacy 2 K bubble; the Studio preview
+	-- independently selects a stronger 6 K perturbation through its attributes.
+	local Atmosphere = loadModule(root)
+	local Grid3D = loadModule(root.Core.Grid3D)
+	local Thermodynamics = loadModule(root.Thermodynamics.Thermodynamics)
+	local Saturation = loadModule(root.Thermodynamics.Saturation)
+	local optionGrid = Grid3D.new(7, 5, 7, 12, grid.Origin)
+	local defaultBubble = Atmosphere.new(optionGrid)
+	local explicitDefault = Atmosphere.new(optionGrid, { BubbleTemperaturePerturbation = 2 })
+	local warmerBubble = Atmosphere.new(optionGrid, { BubbleTemperaturePerturbation = 6 })
+	for _, name in { "u", "v", "w", "theta", "qv", "qc", "qr", "pressure" } do
+		check(
+			buffer.tostring(defaultBubble.State.Fields[name])
+				== buffer.tostring(explicitDefault.State.Fields[name]),
+			"An explicit 2 K bubble exactly preserves the scientific initialization"
+		)
+	end
+	local core = optionGrid:Index(4, 3, 4)
+	near(
+		warmerBubble.State:Get("theta", core) - defaultBubble.State:Get("theta", core),
+		4,
+		0,
+		"The forwarded 6 K option raises the flat bubble core by another 4 K"
+	)
+	check(
+		warmerBubble.State:Get("qv", core) > defaultBubble.State:Get("qv", core),
+		"The warmer bubble recomputes vapor at the same relative humidity"
+	)
+	near(
+		warmerBubble.State:Get("qv", core),
+		0.98
+			* Saturation.MixingRatio(
+				Thermodynamics.Temperature(
+					warmerBubble.State:Get("theta", core),
+					warmerBubble.State:Get("pressure", core)
+				),
+				warmerBubble.State:Get("pressure", core)
+			),
+		1e-8, -- Initialization uses double precision before pressure/theta become float32.
+		"Vapor follows saturation at the initialized temperature and default bubble humidity"
+	)
+	for index = 1, optionGrid.Count do
+		near(defaultBubble.State:Get("qc", index), 0, 0, "The default bubble initializes clear")
+		near(
+			warmerBubble.State:Get("qc", index),
+			0,
+			0,
+			"A stronger thermal bubble initializes clear"
+		)
+	end
+	local zeroBubble = Atmosphere.new(optionGrid, { BubbleTemperaturePerturbation = 0 })
+	near(
+		zeroBubble.State:Get("theta", core),
+		buffer.readf32(zeroBubble.Profile.Theta, 8),
+		0,
+		"Zero thermal perturbation is valid and matches the environmental theta"
+	)
+	for _, invalidTemperature in { -1, 0 / 0, math.huge, -math.huge } do
+		rejects(function()
+			Atmosphere.new(optionGrid, { BubbleTemperaturePerturbation = invalidTemperature })
+		end, "Negative or nonfinite bubble temperature fails explicitly")
+	end
+
 	check(laptop.Advance(1.05, 2) == 1, "Laptop catch-up performs at most one fixed physics step")
 	near(laptop.GetTime(), 0.25, 0, "Laptop catch-up preserves the physical timestep")
 	near(laptop.GetDroppedTime(), 1.75, 1e-12, "Laptop reports discarded full-step backlog")
@@ -245,8 +319,6 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 
 	-- This complete 240-second production regression rejects resolutions that
 	-- are fast but dissolve the bubble before it becomes a useful moving cloud.
-	local Atmosphere = loadModule(root)
-	local configuration = { BackgroundU = 2, BackgroundV = 1, BubbleRelativeHumidity = 0.999 }
 	local simulation = Atmosphere.new(grid, configuration)
 	local initial = simulation:GetDiagnostics()
 	near(initial.MaxCloudWater, 0, 0, "Laptop cloud regression starts completely clear")
@@ -363,8 +435,8 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		"Laptop unweighted total-water drift remains below 0.0001 percent"
 	)
 	check(
-		firstVisible ~= nil and firstVisible < 90,
-		"Laptop cloud appears through condensation within 90 simulated seconds"
+		firstVisible ~= nil and firstVisible < 30,
+		"The current startup preview produces a visible cloud within 30 simulated seconds"
 	)
 	check(final.CloudCells > 0, "Laptop cloud survives the full 240-second wind scenario")
 	check(

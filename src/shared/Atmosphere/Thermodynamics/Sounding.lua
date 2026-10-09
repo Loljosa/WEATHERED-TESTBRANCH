@@ -13,6 +13,7 @@ export type Options = {
 	ShearU: number?, -- (m/s)/m of physical height
 	ShearV: number?, -- (m/s)/m of physical height
 	BubbleRelativeHumidity: number?, -- fraction in (0, 1]; core default remains 0.98.
+	BubbleTemperaturePerturbation: number?, -- warm-core potential-temperature excess, K; default 2.
 }
 
 export type Profile = {
@@ -46,6 +47,7 @@ function Sounding.Initialize(
 	local shearU = settings.ShearU or 0
 	local shearV = settings.ShearV or 0
 	local bubbleRH = settings.BubbleRelativeHumidity or 0.98
+	local bubbleTemperature = settings.BubbleTemperaturePerturbation or 2
 	assert(Validation.IsFinite(backgroundU), "BackgroundU must be finite")
 	assert(Validation.IsFinite(backgroundV), "BackgroundV must be finite")
 	assert(Validation.IsFinite(shearU), "ShearU must be finite")
@@ -53,6 +55,10 @@ function Sounding.Initialize(
 	assert(
 		Validation.IsFinite(bubbleRH) and bubbleRH > 0 and bubbleRH <= 1,
 		"BubbleRelativeHumidity must be finite and in (0, 1]"
+	)
+	assert(
+		Validation.IsFinite(bubbleTemperature) and bubbleTemperature >= 0,
+		"BubbleTemperaturePerturbation must be finite and nonnegative (K)"
 	)
 
 	local grid = state.Grid
@@ -121,7 +127,7 @@ function Sounding.Initialize(
 						strength = 1 - edge * edge * (3 - 2 * edge)
 					end
 				end
-				local parcelTheta = theta + 2 * strength -- K warm bubble; no prescribed w or qc.
+				local parcelTheta = theta + bubbleTemperature * strength -- K; no prescribed w or qc.
 				local parcelRH = rh + (bubbleRH - rh) * strength
 				local parcelQv = parcelRH * Saturation.MixingRatio(parcelTheta * exner, pressure)
 				local offset = ((y - 1) * layerStride + (z - 1) * grid.SizeX + x - 1) * 4

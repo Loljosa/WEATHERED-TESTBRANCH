@@ -290,7 +290,12 @@ local testFingerprint = sourceFingerprint({ "scripts", "tests" })
 local testDynamics = require("../tests/three-dimensional-dynamics")
 local operatorsOnly = table.find(process.args, "--operators-only") ~= nil
 local quick = table.find(process.args, "--quick") ~= nil
-local scenarioSummaries = testDynamics(root, loadModule, check, near, rejects, operatorsOnly, quick)
+-- Preview tuning needs the complete startup regression, without repeating four
+-- long scientific scenarios. All short operator/API/controller checks still run.
+local previewOnly = table.find(process.args, "--preview-only") ~= nil
+assert(not (previewOnly and quick), "Use --preview-only or --quick, not both")
+local scenarioSummaries =
+	testDynamics(root, loadModule, check, near, rejects, operatorsOnly, quick or previewOnly)
 if operatorsOnly then
 	print(string.format("PASS: %d scalar and 3D operator checks", checks))
 	return
@@ -320,6 +325,32 @@ end, "Excessive momentum Courant number must fail explicitly")
 near(cflSimulation.Time, 0, 0, "A failed CFL check does not advance the clock")
 
 local testLaptopPerformance = require("../tests/laptop-performance")
+local startupAttributes =
+	serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
+near(
+	startupAttributes.BubbleTemperaturePerturbation,
+	6,
+	0,
+	"Studio startup selects the faster 6 K bubble"
+)
+near(
+	startupAttributes.BubbleRelativeHumidity,
+	0.999,
+	0,
+	"Faster startup retains the near-saturated bubble"
+)
+near(startupAttributes.SimulationSpeed, 1, 0, "Faster startup retains the laptop-safe 1x step rate")
+near(startupAttributes.CellSizeStuds, 12, 0, "Faster startup retains exact 12-stud debug cells")
+near(
+	startupAttributes.CloudBottomStuds,
+	424,
+	0,
+	"Faster startup retains the raised display altitude"
+)
+check(
+	startupAttributes.PerformancePreset == "Laptop",
+	"Faster startup keeps the Laptop performance preset"
+)
 testLaptopPerformance(root, loadModule, check, near, rejects, quick)
 local testDebugRenderer = require("../tests/debug-renderer")
 testDebugRenderer(root, loadModule, check, near, rejects)
@@ -426,9 +457,13 @@ print(
 
 if not quick then
 	fs.writeDir("build")
+	local reportPath = if previewOnly
+		then "build/fast-preview-validation.json"
+		else "build/phase2-validation.json"
 	fs.writeFile(
-		"build/phase2-validation.json",
+		reportPath,
 		serde.encode("json", {
+			Mode = if previewOnly then "PreviewOnly" else "Full",
 			SourceRevision = string.gsub(
 				process.exec("git", { "rev-parse", "HEAD" }).stdout,
 				"%s+$",
@@ -444,7 +479,8 @@ if not quick then
 			FixedDt = 0.25,
 			DiagnosticSamplingSeconds = 10,
 			Scenarios = scenarioSummaries,
+			PreviewReport = "build/laptop-validation.json",
 		})
 	)
-	print("Saved measured scenario diagnostics: build/phase2-validation.json")
+	print("Saved measured scenario diagnostics: " .. reportPath)
 end
