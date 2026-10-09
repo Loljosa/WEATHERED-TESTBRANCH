@@ -12,34 +12,66 @@ local DIAGNOSTIC_INTERVAL = 10
 
 print("[WEATHERED] Starting atmosphere engine", Atmosphere.GetVersion())
 
--- Read configuration once at startup; no Instance lookups inside physics loops.
-local function numericAttribute(name: string): number
+-- Rojo metadata exposes these Number attributes in Properties before Play.
+-- Display/wind/moisture settings are startup-only; SimulationSpeed updates live.
+local function numericAttribute(name: string, default: number): number
 	local value = script:GetAttribute(name)
 	if value == nil then
-		return 0
+		return default
 	end
 	assert(typeof(value) == "number", name .. " must be a numeric script attribute")
-	return value :: number
+	local numberValue = value :: number
+	assert(
+		numberValue == numberValue and math.abs(numberValue) < math.huge,
+		name .. " must be finite"
+	)
+	return numberValue
+end
+
+local function readSimulationSpeed(): number
+	return SimulationController.ValidateSpeed(numericAttribute("SimulationSpeed", 2))
 end
 
 local state = SimulationController.Initialize({
-	BackgroundU = numericAttribute("BackgroundU"),
-	BackgroundV = numericAttribute("BackgroundV"),
-	ShearU = numericAttribute("ShearU"),
-	ShearV = numericAttribute("ShearV"),
+	BackgroundU = numericAttribute("BackgroundU", 2),
+	BackgroundV = numericAttribute("BackgroundV", 1),
+	ShearU = numericAttribute("ShearU", 0),
+	ShearV = numericAttribute("ShearV", 0),
+	BubbleRelativeHumidity = numericAttribute("BubbleRelativeHumidity", 0.999),
+}, {
+	CellSizeStuds = numericAttribute("CellSizeStuds", 12),
+	CloudBottomStuds = numericAttribute("CloudBottomStuds", 24),
 })
+local simulationSpeed = readSimulationSpeed()
 local visibleVoxels = VoxelDebugRenderer.Render(state)
 local renderAccumulator = 0
 local diagnosticAccumulator = 0
 local heartbeat: RBXScriptConnection? = nil
+
+local speedChanged = script:GetAttributeChangedSignal("SimulationSpeed"):Connect(function()
+	local success, result = pcall(readSimulationSpeed)
+	if success then
+		simulationSpeed = result :: number
+		print(
+			string.format(
+				"[WEATHERED] SimulationSpeed=%.2fx; physical dt remains %.2fs",
+				simulationSpeed,
+				SimulationController.FixedDt
+			)
+		)
+	else
+		warn("[WEATHERED] Invalid SimulationSpeed; retaining previous value: " .. tostring(result))
+	end
+end)
 
 local function printDiagnostics()
 	local diagnostics = SimulationController.GetDiagnostics()
 
 	print(
 		string.format(
-			"[WEATHERED] t=%.1fs qc_max=%.6f cloud=%d visible=%d; u[%.2f,%.2f] v[%.2f,%.2f] w[%.2f,%.2f]m/s; CFL=%.4f step=%.2fms dropped=%.2fs",
+			"[WEATHERED] t=%.1fs speed=%.2fx qc_max=%.6fkg/kg cloud=%d visible=%d; u[%.2f,%.2f] v[%.2f,%.2f] w[%.2f,%.2f]m/s; momentum stability=%.4f scalar outgoing CFL=%.4f last-step=%.2fms dropped=%.2fs",
 			diagnostics.Time,
+			diagnostics.SimulationSpeed,
 			diagnostics.MaxCloudWater,
 			diagnostics.CloudCells,
 			visibleVoxels,
@@ -49,20 +81,25 @@ local function printDiagnostics()
 			diagnostics.MaxV,
 			diagnostics.MinW,
 			diagnostics.MaxW,
-			diagnostics.MaxCourant,
+			diagnostics.MomentumCourant,
+			diagnostics.TransportCourant,
 			diagnostics.StepMilliseconds,
 			diagnostics.DroppedSimulationTime
 		)
 	)
 	print(
 		string.format(
-			"[WEATHERED] div_rms %.3g -> %.3g/s (max %.3g -> %.3g); PCG=%d residual=%.3g/s; unweighted qv/qc/qr sums=%.9g/%.9g/%.9g drift=%+.6f%%; qc centroid=(%.1f,%.1f,%.1f)m defined=%s",
+			"[WEATHERED] div_rms %.3g -> %.3g/s (max %.3g -> %.3g); PCG=%d residual RMS/max=%.3g/%.3g/s target=%.3g/s float32 tolerance=%.3g/s converged=%s; unweighted qv/qc/qr sums=%.9g/%.9g/%.9g drift=%+.6f%%; qc centroid=(%.1f,%.1f,%.1f)m defined=%s",
 			diagnostics.DivergenceBeforeRms,
 			diagnostics.DivergenceAfterRms,
 			diagnostics.DivergenceBeforeMax,
 			diagnostics.DivergenceAfterMax,
 			diagnostics.ProjectionIterations,
 			diagnostics.ProjectionResidual,
+			diagnostics.ProjectionResidualMax,
+			diagnostics.ProjectionTolerance,
+			diagnostics.ProjectionPostTolerance,
+			tostring(diagnostics.ProjectionConverged),
 			diagnostics.QvSum,
 			diagnostics.QcSum,
 			diagnostics.QrSum,
@@ -77,7 +114,7 @@ end
 
 heartbeat = RunService.Heartbeat:Connect(function(frameDt: number)
 	local success, failure = pcall(function()
-		SimulationController.Advance(frameDt)
+		SimulationController.Advance(frameDt, simulationSpeed)
 		renderAccumulator += frameDt
 		diagnosticAccumulator += frameDt
 
@@ -97,6 +134,7 @@ heartbeat = RunService.Heartbeat:Connect(function(frameDt: number)
 		if connection then
 			connection:Disconnect()
 		end
+		speedChanged:Disconnect()
 		warn("[WEATHERED] Atmosphere stopped after simulation/debug failure: " .. tostring(failure))
 	end
 end)

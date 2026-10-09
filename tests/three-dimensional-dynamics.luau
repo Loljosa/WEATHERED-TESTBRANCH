@@ -10,7 +10,8 @@ return function(
 	check: any,
 	near: any,
 	rejects: any,
-	operatorsOnly: boolean?
+	operatorsOnly: boolean?,
+	quick: boolean?
 )
 	local Grid3D = loadModule(root.Core.Grid3D)
 	local State = loadModule(root.Core.AtmosphereState)
@@ -145,7 +146,7 @@ return function(
 	pulse:SetCell("qr", 1, 3, 1, 0.003)
 	local pulseBefore = totals(pulse)
 	local negativeFaces = uniformFaces(-10, -5)
-	local negativeTransport = Transport.new(geometry)
+	local negativeTransport = Transport.new(geometry, { Scheme = "Upwind" })
 	negativeTransport:Advance(pulse, negativeFaces, 1)
 	for _, field in { "qv", "qc", "qr" } do
 		local amount = pulseBefore[field]
@@ -176,7 +177,7 @@ return function(
 	end
 	local positivePulse = makeState()
 	positivePulse:SetCell("qc", grid.SizeX, 3, grid.SizeZ, 0.01)
-	Transport.new(geometry):Advance(positivePulse, uniformFaces(10, 5), 1)
+	Transport.new(geometry, { Scheme = "Upwind" }):Advance(positivePulse, uniformFaces(10, 5), 1)
 	near(
 		positivePulse:GetCell("qc", grid.SizeX, 3, grid.SizeZ),
 		0.007,
@@ -204,7 +205,7 @@ return function(
 	local verticalFaces = uniformFaces(0, 0)
 	local lowerIndex = grid:Index(4, 3, 4) - 1
 	buffer.writef32(verticalFaces.W, lowerIndex * 4, 16)
-	Transport.new(geometry):Advance(vertical, verticalFaces, 1)
+	Transport.new(geometry, { Scheme = "Upwind" }):Advance(vertical, verticalFaces, 1)
 	near(
 		vertical:GetCell("qc", 4, 2, 4),
 		0.008,
@@ -222,7 +223,7 @@ return function(
 	downward:SetCell("qc", 4, 3, 4, 0.006)
 	local downwardFaces = uniformFaces(0, 0)
 	buffer.writef32(downwardFaces.W, lowerIndex * 4, -16)
-	Transport.new(geometry):Advance(downward, downwardFaces, 1)
+	Transport.new(geometry, { Scheme = "Upwind" }):Advance(downward, downwardFaces, 1)
 	near(downward:GetCell("qc", 4, 3, 4), 0.0048, 1e-9, "Downward flux depletes upper donor")
 	near(downward:GetCell("qc", 4, 2, 4), 0.0012, 1e-9, "Downward flux reaches the lower layer")
 	near(totals(downward).qc, 0.006, 2e-9, "Interior downward flux conserves water")
@@ -237,7 +238,7 @@ return function(
 	local variedFaces = uniformFaces(24, 14)
 	buffer.writef32(variedFaces.W, lowerIndex * 4, 10)
 	local variedCourant =
-		Transport.new(geometry)
+		Transport.new(geometry, { Scheme = "Upwind" })
 			:Advance(varied, variedFaces, 0.79 / (24 / grid.Dx + 14 / grid.Dz + 10 / grid.Dy))
 	near(variedCourant, 0.79, 1e-12, "Multidimensional outgoing CFL is tested near its limit")
 	for field, before in variedBefore do
@@ -254,7 +255,7 @@ return function(
 			)
 		end
 	end
-	local function smoothAdvectionError(sizeX: number): number
+	local function smoothAdvectionError(sizeX: number, scheme: string): number
 		local domainLength = 1000
 		local dx = domainLength / sizeX
 		local convergenceGrid =
@@ -272,7 +273,7 @@ return function(
 			buffer.writef32(convergenceFaces.U, (index - 1) * 4, 4)
 		end
 		convergenceFaces:Seal()
-		local transport = Transport.new(convergenceGeometry)
+		local transport = Transport.new(convergenceGeometry, { Scheme = scheme })
 		local dt = 0.2 * dx / 4
 		local steps = math.floor(50 / dt + 0.5)
 		near(steps * dt, 50, 1e-12, "Convergence grids advance the same physical duration")
@@ -293,18 +294,38 @@ return function(
 		end
 		return math.sqrt(squaredError / convergenceGrid.Count)
 	end
-	local coarseError = smoothAdvectionError(16)
-	local fineError = smoothAdvectionError(32)
-	check(
-		fineError < coarseError * 0.7,
-		"Refined spatial resolution converges toward exact translated sine"
-	)
+	local fctErrors, upwindErrors = {}, {}
+	for _, sizeX in { 16, 32, 64 } do
+		local fct = smoothAdvectionError(sizeX, "FCT")
+		local upwind = smoothAdvectionError(sizeX, "Upwind")
+		table.insert(fctErrors, fct)
+		table.insert(upwindErrors, upwind)
+		check(
+			fct < upwind * 0.5,
+			"Bounded high-order transport is more accurate than donor-cell transport"
+		)
+	end
+	for level = 2, 3 do
+		check(
+			fctErrors[level] < fctErrors[level - 1] * 0.45,
+			"FCT converges faster than first order under grid refinement"
+		)
+		check(
+			upwindErrors[level] < upwindErrors[level - 1] * 0.7,
+			"Reference donor-cell transport converges under grid refinement"
+		)
+	end
 	print(
 		string.format(
-			"PASS: smooth periodic transport spatial convergence NX16/32, RMS %.9g -> %.9g kg/kg, ratio %.4f (U4m/s,50s,CFL.2)",
-			coarseError,
-			fineError,
-			fineError / coarseError
+			"PASS: smooth periodic transport NX16/32/64 FCT RMS=(%.9g,%.9g,%.9g), Upwind=(%.9g,%.9g,%.9g) kg/kg; FCT ratios %.4f/%.4f (U4m/s,50s,CFL.2)",
+			fctErrors[1],
+			fctErrors[2],
+			fctErrors[3],
+			upwindErrors[1],
+			upwindErrors[2],
+			upwindErrors[3],
+			fctErrors[2] / fctErrors[1],
+			fctErrors[3] / fctErrors[2]
 		)
 	)
 	check(
@@ -585,6 +606,8 @@ return function(
 			afterMax
 		)
 	)
+	local reworkNumerics = require("./rework-numerics")
+	reworkNumerics(root, loadModule, check, near, rejects)
 	if operatorsOnly then
 		return
 	end
@@ -622,6 +645,11 @@ return function(
 			"Identical fixed-step simulations have deterministic face snapshots"
 		)
 	end
+	local testTransaction = require("./transactional-simulation")
+	testTransaction(root, loadModule, check, near, rejects)
+	if quick then
+		return
+	end
 
 	-- Measured reference from the unchanged Phase 1 production run (240s):
 	-- qv+qc drift -0.19963%; this is comparison data, not a physics implementation.
@@ -647,8 +675,15 @@ return function(
 		return 0, 0
 	end
 	local summaries = {}
-	local function runScenario(label: string, configuration: any, expectCloud: boolean): any
-		local simulationGrid = Grid3D.new(24, 12, 24, 64, Vector3.new(-768, 128, -768))
+	local function runScenario(
+		label: string,
+		configuration: any,
+		expectCloud: boolean,
+		preview: boolean?
+	): any
+		local simulationGrid = if preview
+			then Grid3D.new(24, 12, 24, 12, Vector3.new(-144, 24, -144))
+			else Grid3D.new(24, 12, 24, 64, Vector3.new(-768, 128, -768))
 		local simulation = Atmosphere.new(simulationGrid, configuration)
 		local initial = simulation:GetDiagnostics()
 		local initialWater = initial.WaterSum
@@ -657,6 +692,8 @@ return function(
 		local pressureSnapshot = buffer.tostring(simulation.State.Fields.pressure)
 		local peakCloud, peakU, peakV, peakW = 0, 0, 0, 0
 		local firstCloud: number? = nil
+		local firstCloudWater: number? = nil
+		local exactFirstVisible: number? = nil
 		local firstCentroid: any = nil
 		local finalCentroid: any = nil
 		local maximumDivergence, maximumIterations, maximumCourant = 0, 0, 0
@@ -665,6 +702,19 @@ return function(
 		local startTime = os.clock()
 		for step = 1, 960 do
 			simulation:Step(0.25)
+			if preview and (firstCloudWater == nil or exactFirstVisible == nil) then
+				local maximumCloud = 0
+				for offset = 0, simulationGrid.Count * 4 - 4, 4 do
+					maximumCloud =
+						math.max(maximumCloud, buffer.readf32(simulation.State.Fields.qc, offset))
+				end
+				if maximumCloud > 0 then
+					firstCloudWater = firstCloudWater or simulation.Time
+				end
+				if maximumCloud >= 0.00005 then
+					exactFirstVisible = simulation.Time
+				end
+			end
 			totalMilliseconds += simulation.StepMilliseconds
 			maximumMilliseconds = math.max(maximumMilliseconds, simulation.StepMilliseconds)
 			maximumIterations = math.max(maximumIterations, simulation.Projection.Last.Iterations)
@@ -765,10 +815,21 @@ return function(
 		end
 		local summary = {
 			Scenario = label,
+			Configuration = configuration or {},
+			ScalarScheme = simulation.Transport.Scheme,
+			DisplayCellSizeStuds = simulationGrid.CellSize,
+			DisplayBottomStuds = simulationGrid.Origin.Y,
+			PhysicalSpacingMeters = {
+				Dx = simulationGrid.Dx,
+				Dy = simulationGrid.Dy,
+				Dz = simulationGrid.Dz,
+			},
 			Initial = initial,
 			Final = final,
 			Snapshots = snapshots,
 			FirstVisibleCloudSeconds = firstCloud,
+			FirstCloudWaterSecondsExact = firstCloudWater,
+			FirstVisibleCloudSecondsExact = exactFirstVisible,
 			PeakCloud = peakCloud,
 			SampledPeakFaceU = peakU,
 			SampledPeakFaceV = peakV,
@@ -828,11 +889,26 @@ return function(
 				)
 			end
 		end
+		if preview then
+			check(
+				exactFirstVisible ~= nil and exactFirstVisible < 60,
+				"Studio preview generates visible cloud within one simulated minute"
+			)
+			print(
+				string.format(
+					"PASS: preview exact first qc>0 at %.2fs and qc>=5e-5 at %.2fs; display %.0fstud cells, bottom %.0fstuds",
+					firstCloudWater or -1,
+					exactFirstVisible or -1,
+					simulationGrid.CellSize,
+					simulationGrid.Origin.Y
+				)
+			)
+		end
 		return simulation
 	end
 	local defaultSimulation = runScenario("default", nil, true)
 	local advectingSimulation =
-		runScenario("wind/shear", { BackgroundU = 0.5, BackgroundV = 0.25 }, true)
+		runScenario("weak wind", { BackgroundU = 0.5, BackgroundV = 0.25 }, true)
 	check(
 		advectingSimulation.State:Get("u", 1) ~= defaultSimulation.State:Get("u", 1),
 		"Configured wind affects authoritative velocity state"
@@ -841,6 +917,12 @@ return function(
 		"wind8/4 stress",
 		{ BackgroundU = 8, BackgroundV = 4, ShearU = 0.002, ShearV = -0.001 },
 		false
+	)
+	runScenario(
+		"Studio preview",
+		{ BackgroundU = 2, BackgroundV = 1, BubbleRelativeHumidity = 0.999 },
+		true,
+		true
 	)
 	return summaries
 end

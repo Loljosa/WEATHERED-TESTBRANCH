@@ -262,26 +262,39 @@ print(
 	)
 )
 
+local function sourceFingerprint(directories: { string }): string
+	local paths = {}
+	local function collect(path: string)
+		for _, name in fs.readDir(path) do
+			local filePath = path .. "/" .. name
+			if fs.isDir(filePath) then
+				collect(filePath)
+			else
+				table.insert(paths, filePath)
+			end
+		end
+	end
+	for _, directory in directories do
+		collect(directory)
+	end
+	table.sort(paths)
+	local contents = {}
+	for _, path in paths do
+		table.insert(contents, path .. "\0" .. fs.readFile(path) .. "\0")
+	end
+	return serde.hash("sha256", table.concat(contents))
+end
+local productionFingerprint = sourceFingerprint({ "src" })
+local testFingerprint = sourceFingerprint({ "scripts", "tests" })
+
 local testDynamics = require("../tests/three-dimensional-dynamics")
 local operatorsOnly = table.find(process.args, "--operators-only") ~= nil
-local scenarioSummaries = testDynamics(root, loadModule, check, near, rejects, operatorsOnly)
+local quick = table.find(process.args, "--quick") ~= nil
+local scenarioSummaries = testDynamics(root, loadModule, check, near, rejects, operatorsOnly, quick)
 if operatorsOnly then
 	print(string.format("PASS: %d scalar and 3D operator checks", checks))
 	return
 end
-fs.writeDir("build")
-fs.writeFile(
-	"build/phase2-validation.json",
-	serde.encode("json", {
-		Phase1MeasuredWaterDriftPercent = -0.19963,
-		SimulationSecondsPerScenario = 240,
-		FixedDt = 0.25,
-		DiagnosticSamplingSeconds = 10,
-		Scenarios = scenarioSummaries,
-	})
-)
-print("Saved measured scenario diagnostics: build/phase2-validation.json")
-
 -- A compact domain is enough to check numerical failure behavior.
 local failureGrid = Grid3D.new(3, 4, 3, 64, Vector3.zero)
 local failureSimulation = Atmosphere.new(failureGrid)
@@ -324,6 +337,10 @@ local controllerRoot, loadControllerModule = createLoader("src/server/Simulation
 	end,
 })
 local controller = loadControllerModule(controllerRoot.SimulationController)
+local previewGrid = controller.GetGrid()
+near(previewGrid.CellSize, 12, 0, "Controller defaults to 12-stud preview cells")
+near(previewGrid.Origin.Y, 24, 0, "Controller defaults to a 24-stud model bottom")
+near(previewGrid.Dx, 100, 0, "Preview display size preserves the 100-meter physical grid")
 local controllerState = controller.Initialize({ BackgroundU = 0.5, BackgroundV = 0.25 })
 check(controller.Initialize() == controllerState, "Controller Initialize is idempotent")
 near(controllerState:Get("u", 1), 0.5, 0, "Lazy controller Initialize accepts background x wind")
@@ -349,6 +366,46 @@ near(
 	0,
 	"Controller diagnostics include dropped simulation time"
 )
+check(
+	controller.Advance(0.125, 2) == 1,
+	"Preview speed doubles accumulated physical time without changing dt"
+)
+near(controller.GetTime(), 2.5, 0, "Double-speed preview still advances by fixed 0.25-second steps")
+near(controller.GetDiagnostics().SimulationSpeed, 2, 0, "Controller reports current preview speed")
+check(controller.Advance(0.25, 0.5) == 0, "Half-speed preview accumulates a partial fixed step")
+check(controller.Advance(0.25, 0.5) == 1, "Two half-speed frames form exactly one fixed step")
+near(controller.GetTime(), 2.75, 0, "Preview speed changes preserve the existing accumulator")
+check(controller.Advance(3, 4) == 8, "Maximum preview speed retains bounded catch-up")
+near(controller.GetTime(), 4.75, 0, "Scaled catch-up commits only executed fixed steps")
+near(
+	controller.GetDroppedTime(),
+	11,
+	0,
+	"Scaled backlog is accounted in physical simulation seconds"
+)
+for _, speed in { 0, 0.24999, 4.00001, math.huge, 0 / 0 } do
+	rejects(function()
+		controller.Advance(0.25, speed)
+	end, "Preview speed rejects nonfinite or unsupported rates")
+end
+local customRoot, loadCustomController = createLoader("src/server/Simulation", {
+	game = game,
+	print = function() end,
+	warn = function() end,
+})
+local customController = loadCustomController(customRoot.SimulationController)
+customController.Initialize(nil, { CellSizeStuds = 16, CloudBottomStuds = 32 })
+local displayGrid = customController.GetGrid()
+near(displayGrid.CellSize, 16, 0, "Controller accepts display-only cell size configuration")
+near(displayGrid.Origin.X, -192, 0, "Configured display domain remains centered horizontally")
+near(
+	displayGrid:GridToWorld(1, 1, 1).Y,
+	40,
+	0,
+	"Configured grid/world conversion uses display studs"
+)
+local _, physicalHeight = displayGrid:GridToPhysical(1, 1, 1)
+near(physicalHeight, 50, 0, "Display options do not change physical cell height")
 rejects(function()
 	controller.Advance(-1)
 end, "Negative Heartbeat dt must fail")
@@ -361,3 +418,28 @@ print(
 		checks
 	)
 )
+
+if not quick then
+	fs.writeDir("build")
+	fs.writeFile(
+		"build/phase2-validation.json",
+		serde.encode("json", {
+			SourceRevision = string.gsub(
+				process.exec("git", { "rev-parse", "HEAD" }).stdout,
+				"%s+$",
+				""
+			),
+			WorkingTreeChanged = process.exec("git", { "status", "--porcelain" }).stdout ~= "",
+			BeforeReworkReport = "build/phase2-before-rework.json",
+			ProductionSourceSHA256 = productionFingerprint,
+			TestSourceSHA256 = testFingerprint,
+			TotalChecks = checks,
+			Phase1MeasuredWaterDriftPercent = -0.19963,
+			SimulationSecondsPerScenario = 240,
+			FixedDt = 0.25,
+			DiagnosticSamplingSeconds = 10,
+			Scenarios = scenarioSummaries,
+		})
+	)
+	print("Saved measured scenario diagnostics: build/phase2-validation.json")
+end

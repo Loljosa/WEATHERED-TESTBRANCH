@@ -152,8 +152,12 @@ function Momentum:Predict(
 		"Momentum geometry must match state and faces"
 	)
 	assert(profile.CellHeightMeters == geometry.Dy, "Sounding height must match physical Y spacing")
-	faces:CheckFinite()
 	local count = geometry.Count
+	-- Each normal face velocity participates in its component CFL check below;
+	-- invalid velocities fail there before any live-face commit, without an extra scan.
+	assert(buffer.len(faces.U) == count * 4, "Momentum U buffer length mismatch")
+	assert(buffer.len(faces.V) == count * 4, "Momentum V buffer length mismatch")
+	assert(buffer.len(faces.W) == (count + geometry.Plane) * 4, "Momentum W buffer length mismatch")
 	local plane = geometry.Plane
 	local rowBytes = plane * 4
 	for offset = 0, rowBytes - 4, 4 do

@@ -21,8 +21,10 @@ export type Config = {
 	BackgroundV: number?,
 	ShearU: number?,
 	ShearV: number?,
+	BubbleRelativeHumidity: number?,
 	MomentumOptions: Momentum.Options?,
 	ProjectionOptions: Projection.Options?,
+	TransportOptions: Transport.Options?,
 }
 
 export type Diagnostics = {
@@ -48,8 +50,12 @@ export type Diagnostics = {
 	DivergenceAfterMax: number,
 	ProjectionIterations: number,
 	ProjectionResidual: number, -- divergence-equivalent RMS, s^-1.
+	ProjectionResidualMax: number,
 	ProjectionTolerance: number,
 	ProjectionQuantizationFloor: number,
+	ProjectionF64RoundingFloor: number,
+	ProjectionPostTolerance: number,
+	ProjectionConverged: boolean,
 	MaxCourant: number,
 	MomentumCourant: number,
 	TransportCourant: number,
@@ -69,6 +75,11 @@ export type Simulation = typeof(setmetatable(
 		Momentum: Momentum.Momentum,
 		Projection: Projection.Projection,
 		Transport: Transport.Transport,
+		PendingState: AtmosphereState.AtmosphereState,
+		PendingFaces: FaceVelocity.FaceVelocity,
+		ProjectionBackup: buffer,
+		ProjectionDiagnosticsBackup: Projection.Diagnostics,
+		PhaseRounding: buffer,
 		Time: number,
 		InitialWaterSum: number,
 		MomentumCourant: number,
@@ -77,6 +88,9 @@ export type Simulation = typeof(setmetatable(
 	},
 	Simulation
 ))
+
+local SCALARS = { "theta", "qv", "qc", "qr" }
+local DYNAMIC_FIELDS = { "u", "v", "w", "theta", "qv", "qc", "qr" }
 
 local function waterSum(state: AtmosphereState.AtmosphereState): number
 	local fields = state.Fields
@@ -99,19 +113,30 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 		BackgroundV = settings.BackgroundV,
 		ShearU = settings.ShearU,
 		ShearV = settings.ShearV,
+		BubbleRelativeHumidity = settings.BubbleRelativeHumidity,
 	})
 	local geometry = Geometry.new(grid)
 	local faces = FaceVelocity.new(geometry)
 	faces:Initialize(state)
 	faces:WriteCellCenters(state)
+	local projection = Projection.new(geometry, settings.ProjectionOptions)
+	local pendingState = AtmosphereState.new(grid)
+	-- Thermodynamic pressure is fixed in space, not transported or projected.
+	-- Share its read-only buffer; all seven evolving fields have separate storage.
+	pendingState.Fields.pressure = state.Fields.pressure
 	local self = setmetatable({
 		State = state,
 		Profile = profile,
 		Geometry = geometry,
 		Faces = faces,
 		Momentum = Momentum.new(geometry, settings.MomentumOptions),
-		Projection = Projection.new(geometry, settings.ProjectionOptions),
-		Transport = Transport.new(geometry),
+		Projection = projection,
+		Transport = Transport.new(geometry, settings.TransportOptions),
+		PendingState = pendingState,
+		PendingFaces = FaceVelocity.new(geometry),
+		ProjectionBackup = buffer.create(geometry.Count * 8),
+		ProjectionDiagnosticsBackup = table.clone(projection.Last),
+		PhaseRounding = buffer.create(12),
 		Time = 0,
 		InitialWaterSum = waterSum(state),
 		MomentumCourant = 0,
@@ -122,10 +147,36 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 	return self
 end
 
--- First-order split: old-state momentum predictor -> MAC projection -> shared-face
--- conservative scalar transport -> local saturation/latent heating. Hydrostatic
--- pressure stays fixed in space. Cell-center u/v/w are derived diagnostics ONLY;
--- forcing/transport must change Faces, not those diagnostic buffers.
+-- Run against owned staging storage. The protected call uses this static function
+-- rather than allocating a new closure per step.
+local function advancePending(self: Simulation, dt: number): (number, number)
+	local state, faces = self.PendingState, self.PendingFaces
+	local momentumCourant = self.Momentum:Predict(state, self.Profile, faces, dt)
+	self.Projection:Project(faces, dt)
+	local transportCourant = self.Transport:Advance(state, faces, dt)
+	local fields = state.Fields
+	for offset = 0, self.Geometry.Count * 4 - 4, 4 do
+		local theta, qv, qc = WarmCloud.AdjustFloat32(
+			buffer.readf32(fields.theta, offset),
+			buffer.readf32(fields.qv, offset),
+			buffer.readf32(fields.qc, offset),
+			buffer.readf32(fields.pressure, offset),
+			self.PhaseRounding
+		)
+		buffer.writef32(fields.theta, offset, theta)
+		buffer.writef32(fields.qv, offset, qv)
+		buffer.writef32(fields.qc, offset, qc)
+	end
+	faces:WriteCellCenters(state)
+	Validation.CheckState(state)
+	return momentumCourant, transportCourant
+end
+
+-- First-order operator split: old-state momentum -> MAC projection -> bounded
+-- conservative scalar transport -> saturation/latent heating. SSPRK2 improves
+-- scalar transport alone; it does not make the whole coupled model second-order.
+-- Commit every evolving field together only after all stages validate. Failures
+-- preserve public buffers, time, diagnostics, and the pressure solver warm start.
 function Simulation:Step(dt: number)
 	assert(
 		Validation.IsFinite(dt) and dt > 0 and dt <= Simulation.FixedDt,
@@ -134,23 +185,34 @@ function Simulation:Step(dt: number)
 	local startTime = os.clock()
 	Validation.CheckState(self.State)
 	self.Faces:CheckFinite()
-	self.MomentumCourant = self.Momentum:Predict(self.State, self.Profile, self.Faces, dt)
-	self.Projection:Project(self.Faces, dt)
-	self.TransportCourant = self.Transport:Advance(self.State, self.Faces, dt)
-	local fields = self.State.Fields
-	for offset = 0, self.Geometry.Count * 4 - 4, 4 do
-		local theta, qv, qc = WarmCloud.Adjust(
-			buffer.readf32(fields.theta, offset),
-			buffer.readf32(fields.qv, offset),
-			buffer.readf32(fields.qc, offset),
-			buffer.readf32(fields.pressure, offset)
-		)
-		buffer.writef32(fields.theta, offset, theta)
-		buffer.writef32(fields.qv, offset, qv)
-		buffer.writef32(fields.qc, offset, qc)
+	local oldFields, pendingFields = self.State.Fields, self.PendingState.Fields
+	for _, name in SCALARS do
+		buffer.copy(pendingFields[name], 0, oldFields[name])
 	end
-	self.Faces:WriteCellCenters(self.State)
-	Validation.CheckState(self.State)
+	pendingFields.pressure = oldFields.pressure
+	buffer.copy(self.PendingFaces.U, 0, self.Faces.U)
+	buffer.copy(self.PendingFaces.V, 0, self.Faces.V)
+	buffer.copy(self.PendingFaces.W, 0, self.Faces.W)
+	buffer.copy(self.ProjectionBackup, 0, self.Projection.Correction)
+	for name, value in self.Projection.Last do
+		(self.ProjectionDiagnosticsBackup :: any)[name] = value
+	end
+	local success, momentumCourant, transportCourant = pcall(advancePending, self, dt)
+	if not success then
+		buffer.copy(self.Projection.Correction, 0, self.ProjectionBackup)
+		for name, value in self.ProjectionDiagnosticsBackup do
+			(self.Projection.Last :: any)[name] = value
+		end
+		error(momentumCourant, 0)
+	end
+	for _, name in DYNAMIC_FIELDS do
+		oldFields[name], pendingFields[name] = pendingFields[name], oldFields[name]
+	end
+	self.Faces.U, self.PendingFaces.U = self.PendingFaces.U, self.Faces.U
+	self.Faces.V, self.PendingFaces.V = self.PendingFaces.V, self.Faces.V
+	self.Faces.W, self.PendingFaces.W = self.PendingFaces.W, self.Faces.W
+	self.MomentumCourant = momentumCourant
+	self.TransportCourant = transportCourant
 	self.Time += dt
 	self.StepMilliseconds = (os.clock() - startTime) * 1000
 end
@@ -241,8 +303,12 @@ function Simulation:GetDiagnostics(): Diagnostics
 		DivergenceAfterMax = p.AfterMax,
 		ProjectionIterations = p.Iterations,
 		ProjectionResidual = p.Residual,
+		ProjectionResidualMax = p.ResidualMax,
 		ProjectionTolerance = p.TargetTolerance,
 		ProjectionQuantizationFloor = p.QuantizationFloor,
+		ProjectionF64RoundingFloor = p.F64RoundingFloor,
+		ProjectionPostTolerance = p.PostTolerance,
+		ProjectionConverged = p.Converged,
 		MaxCourant = math.max(self.MomentumCourant, self.TransportCourant),
 		MomentumCourant = self.MomentumCourant,
 		TransportCourant = self.TransportCourant,

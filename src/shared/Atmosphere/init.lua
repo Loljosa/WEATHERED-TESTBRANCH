@@ -9,7 +9,7 @@ export type Config = Simulation.Config
 
 local Atmosphere = {}
 
-Atmosphere.Version = "0.2.0-alpha"
+Atmosphere.Version = "0.2.1-alpha"
 Atmosphere.FixedDt = Simulation.FixedDt
 Atmosphere.CellHeightMeters = Simulation.CellHeightMeters
 

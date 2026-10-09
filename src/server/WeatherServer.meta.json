@@ -1,0 +1,12 @@
+{
+  "attributes": {
+    "BackgroundU": 2,
+    "BackgroundV": 1,
+    "ShearU": 0,
+    "ShearV": 0,
+    "BubbleRelativeHumidity": 0.999,
+    "CellSizeStuds": 12,
+    "CloudBottomStuds": 24,
+    "SimulationSpeed": 2
+  }
+}

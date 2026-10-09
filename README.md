@@ -36,24 +36,26 @@ saturation, condense cloud water and later evaporate it as conditions change.
 | --- | --- |
 | Atmospheric state | Eight packed float32 fields: `u`, `v`, `w`, `theta`, `qv`, `qc`, `qr`, `pressure` |
 | Thermodynamics | Potential temperature, hydrostatic background pressure and liquid-water saturation |
-| Warm-cloud microphysics | Condensation and evaporation with latent heating/cooling and local water conservation |
+| Warm-cloud microphysics | Condensation and evaporation with coupled float32 phase transfer and latent heating/cooling |
 | 3D dynamics | Staggered winds, buoyancy, drag, viscosity and Boussinesq pressure projection |
-| Scalar transport | Conservative shared-face upwind fluxes; periodic X/Z and sealed Y boundaries |
+| Scalar transport | Bounded conservative flux correction; periodic X/Z and sealed Y boundaries |
 | Time stepping | Fixed 0.25-second steps with bounded catch-up |
 | Debug visualization | Reusable cloud-water voxel Parts, updated at 2 Hz |
 | Validation | Core mathematics, conservative fluxes, projection, numerical failures and 240-second scenarios |
 
-The default grid contains **6,912 cells** (24 × 12 × 24). Display spacing is
-**64 Roblox studs**; physical X/Y/Z spacing is **100 meters**. These scales are
-separate. The Part-based cloud is a development visualization.
+The default grid contains **6,912 cells** (24 × 12 × 24). The Studio preview uses
+**12 × 12 × 12-stud** debug voxels beginning at **Y=24 studs**; physical X/Y/Z
+spacing remains **100 meters**. These scales are separate. The preview explicitly
+uses a nearly saturated moist core and 2/1 m/s background wind; the core factory
+retains its zero-wind, 98% core-humidity defaults.
 
 ### Prototype limits
 
 The flow uses a constant-density approximation rather than stratified atmospheric
-mass continuity. Water accounting reports unweighted mixing-ratio sums. First-order
-transport is diffusive: strong background winds can dilute the bubble before it
-condenses. There is no precipitation fallout, terrain interaction or sustained
-surface forcing.
+mass continuity. Water accounting reports unweighted mixing-ratio sums. Scalar
+transport uses a less diffusive bounded scheme, while the coupled atmosphere
+timestep remains first order. There is no precipitation fallout, terrain
+interaction or sustained surface forcing.
 
 See [Phase 2 dynamics](docs/phase2-dynamics.md) for equations, assumptions, measured
 results and the complete Studio test procedure. The [Phase 1 reference](docs/dynamic-cloud.md)
@@ -106,11 +108,16 @@ module loader. Automated checks cover grid/world conversions, float32 buffer
 safety, saturation, phase-change water and enthalpy conservation, conservative
 3D transport, pressure projection, finite fields and fixed-step catch-up behavior.
 
-Studio testing remains a separate step. In Play mode, watch the server's ten-second
-diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder. The default transient
-cloud should begin appearing after roughly **90 simulated seconds**. Before Play,
-set Number attributes `BackgroundU = 0.5` and `BackgroundV = 0.25` on
-`ServerScriptService.Weather.WeatherServer` for the measured moving-cloud case.
+Studio testing remains a separate step. Use **Run** for the isolated engine-only
+build to keep the editor camera; it has no floor or spawn. Use **Play** when syncing
+into an existing game place with a floor and spawn. Watch the server's ten-second
+diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder near **(0, 60, 0)**.
+Preview settings are Number attributes on `ServerScriptService.Weather.WeatherServer`
+in **Properties → Attributes**. `SimulationSpeed` defaults to **2** and can be
+changed live from **0.25 to 4** in Studio's server view; the physical timestep
+stays 0.25 seconds. No terminal or Command Bar speed command is needed. See the
+[Studio procedure](docs/phase2-dynamics.md#studio-preview-and-controls) for cloud
+timing, wind, humidity and display settings.
 
 ## Repository layout
 

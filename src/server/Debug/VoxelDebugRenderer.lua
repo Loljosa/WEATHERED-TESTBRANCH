@@ -73,7 +73,7 @@ function VoxelDebugRenderer.Render(
 
 	local currentFolder = getFolder()
 	local grid = state.Grid
-	local voxelSize = Vector3.new(grid.CellSize * 0.9, grid.CellSize * 0.9, grid.CellSize * 0.9)
+	local voxelSize = Vector3.new(grid.CellSize, grid.CellSize, grid.CellSize)
 	local cloudField = state.Fields.qc
 	local rendered = 0
 	local created = 0

@@ -12,6 +12,7 @@ export type Options = {
 	BackgroundV: number?, -- m/s at the model bottom
 	ShearU: number?, -- (m/s)/m of physical height
 	ShearV: number?, -- (m/s)/m of physical height
+	BubbleRelativeHumidity: number?, -- fraction in (0, 1]; core default remains 0.98.
 }
 
 export type Profile = {
@@ -44,10 +45,15 @@ function Sounding.Initialize(
 	local backgroundV = settings.BackgroundV or 0
 	local shearU = settings.ShearU or 0
 	local shearV = settings.ShearV or 0
+	local bubbleRH = settings.BubbleRelativeHumidity or 0.98
 	assert(Validation.IsFinite(backgroundU), "BackgroundU must be finite")
 	assert(Validation.IsFinite(backgroundV), "BackgroundV must be finite")
 	assert(Validation.IsFinite(shearU), "ShearU must be finite")
 	assert(Validation.IsFinite(shearV), "ShearV must be finite")
+	assert(
+		Validation.IsFinite(bubbleRH) and bubbleRH > 0 and bubbleRH <= 1,
+		"BubbleRelativeHumidity must be finite and in (0, 1]"
+	)
 
 	local grid = state.Grid
 	local profile: Profile = {
@@ -116,7 +122,7 @@ function Sounding.Initialize(
 					end
 				end
 				local parcelTheta = theta + 2 * strength -- K warm bubble; no prescribed w or qc.
-				local parcelRH = rh + (0.98 - rh) * strength
+				local parcelRH = rh + (bubbleRH - rh) * strength
 				local parcelQv = parcelRH * Saturation.MixingRatio(parcelTheta * exner, pressure)
 				local offset = ((y - 1) * layerStride + (z - 1) * grid.SizeX + x - 1) * 4
 				buffer.writef32(state.Fields.u, offset, u)

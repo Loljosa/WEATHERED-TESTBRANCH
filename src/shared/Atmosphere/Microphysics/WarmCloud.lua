@@ -8,6 +8,7 @@ local WarmCloud = {}
 local LATENT_TEMPERATURE = Constants.LatentHeatVaporization / Constants.SpecificHeatDryAir
 local WATER_TOLERANCE = 1e-10 -- kg/kg, below float32 field precision at cloud mixing ratios
 local MAX_ITERATIONS = 40
+local MAX_FLOAT32 = 3.4028234663852886e38
 
 local function nonnegativeFinite(value: number): boolean
 	return value >= 0 and value < math.huge
@@ -112,6 +113,55 @@ function WarmCloud.Adjust(
 		"Saturation adjustment produced invalid water"
 	)
 	return newTheta, newVapor, newCloudWater
+end
+
+local function roundFloat32(value: number, rounding: buffer): number
+	assert(
+		value == value and math.abs(value) <= MAX_FLOAT32,
+		"Phase adjustment cannot represent a finite float32 value"
+	)
+	buffer.writef32(rounding, 0, value)
+	return buffer.readf32(rounding, 0)
+end
+
+-- Quantize a phase transfer as one coupled operation for float32 state fields.
+-- The caller owns reusable scratch of at least four bytes; this module has no
+-- mutable global scratch. Adjust remains the double-precision mathematical API.
+-- Vapor is rounded first, liquid compensates the represented vapor change, and
+-- latent heat uses that same change. An unrepresentable sub-ULP vapor transfer
+-- cannot repeatedly create liquid while vapor and theta stay fixed.
+function WarmCloud.AdjustFloat32(
+	theta: number,
+	qv: number,
+	qc: number,
+	pressure: number,
+	rounding: buffer
+): (number, number, number)
+	assert(buffer.len(rounding) >= 4, "Phase rounding scratch must contain at least four bytes")
+	local _, targetVapor = WarmCloud.Adjust(theta, qv, qc, pressure)
+	local vapor = roundFloat32(targetVapor, rounding)
+	local totalWater = qv + qc
+	if vapor > totalWater then
+		-- Nearest rounding can exceed available water after complete evaporation.
+		-- Choose its lower float32 neighbor, leaving a nonnegative residual liquid
+		-- reservoir instead of creating water or clipping a cell afterwards.
+		buffer.writef32(rounding, 0, totalWater)
+		if buffer.readf32(rounding, 0) > totalWater then
+			buffer.writeu32(rounding, 0, buffer.readu32(rounding, 0) - 1)
+		end
+		vapor = buffer.readf32(rounding, 0)
+	end
+	local delta = qv - vapor
+	-- qc+delta equals totalWater-vapor but preserves tiny existing qc when
+	-- delta==0, avoiding its loss when adding it to a much larger vapor reservoir.
+	local cloud = roundFloat32(qc + delta, rounding)
+	local adjustedTheta =
+		roundFloat32(theta + LATENT_TEMPERATURE / Thermodynamics.Exner(pressure) * delta, rounding)
+	assert(
+		nonnegativeFinite(vapor) and nonnegativeFinite(cloud),
+		"Coupled phase adjustment produced invalid water"
+	)
+	return adjustedTheta, vapor, cloud
 end
 
 return table.freeze(WarmCloud)
