@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local Atmosphere = require(ReplicatedStorage.Shared.Atmosphere)
 local SimulationController = require(script.Parent.Simulation.SimulationController)
 local PerformanceSettings = require(script.Parent.Simulation.PerformanceSettings)
+local CloudControls = require(script.Parent.Simulation.CloudControls)
 local VoxelDebugRenderer = require(script.Parent.Debug.VoxelDebugRenderer)
 
 local DIAGNOSTIC_INTERVAL = 10
@@ -13,7 +14,7 @@ local DIAGNOSTIC_INTERVAL = 10
 print("[WEATHERED] Starting atmosphere engine", Atmosphere.GetVersion())
 
 -- Rojo metadata exposes these Number attributes in Properties before Play.
--- Display/wind/moisture settings are startup-only; SimulationSpeed updates live.
+-- Attributes set the startup sounding; commands also expose safe live controls.
 local function numericAttribute(name: string, default: number): number
 	local value = script:GetAttribute(name)
 	if value == nil then
@@ -38,14 +39,20 @@ assert(typeof(preset) == "string", "PerformancePreset must be a string script at
 local performance = PerformanceSettings.Resolve(preset :: string)
 local DEBUG_RENDER_INTERVAL = performance.DebugRenderInterval
 
-local state = SimulationController.Initialize({
+local shapeAttribute = script:GetAttribute("CloudShape")
+local cloudShape = if shapeAttribute == nil then "Round" else shapeAttribute
+assert(typeof(cloudShape) == "string", "CloudShape must be Round, Wide or Tower")
+local initialConfig: Atmosphere.Config = {
 	BackgroundU = numericAttribute("BackgroundU", 2),
 	BackgroundV = numericAttribute("BackgroundV", 1),
 	ShearU = numericAttribute("ShearU", 0),
 	ShearV = numericAttribute("ShearV", 0),
 	BubbleRelativeHumidity = numericAttribute("BubbleRelativeHumidity", 0.999),
 	BubbleTemperaturePerturbation = numericAttribute("BubbleTemperaturePerturbation", 6),
-}, {
+	BubbleShape = cloudShape :: string,
+	BubbleScale = numericAttribute("CloudScale", 1),
+}
+local state = SimulationController.Initialize(initialConfig, {
 	CellSizeStuds = numericAttribute("CellSizeStuds", 12),
 	CloudBottomStuds = numericAttribute("CloudBottomStuds", 424),
 	SizeX = performance.SizeX,
@@ -59,6 +66,17 @@ local state = SimulationController.Initialize({
 	FrameBudgetMilliseconds = performance.FrameBudgetMilliseconds,
 })
 local simulationSpeed = readSimulationSpeed()
+local controls = CloudControls.new(initialConfig, function(value: number)
+	simulationSpeed = value
+	script:SetAttribute("SimulationSpeed", value)
+end, function(config: Atmosphere.Config)
+	script:SetAttribute("BackgroundU", config.BackgroundU)
+	script:SetAttribute("BackgroundV", config.BackgroundV)
+	script:SetAttribute("BubbleRelativeHumidity", config.BubbleRelativeHumidity)
+	script:SetAttribute("BubbleTemperaturePerturbation", config.BubbleTemperaturePerturbation)
+	script:SetAttribute("CloudShape", config.BubbleShape or "Round")
+	script:SetAttribute("CloudScale", config.BubbleScale or 1)
+end)
 print(
 	string.format(
 		"[WEATHERED] PerformancePreset=%s; catch-up <=%d steps/Heartbeat, soft budget=%.0fms; debug %.1fHz",
@@ -72,6 +90,16 @@ local visibleVoxels = VoxelDebugRenderer.Render(state)
 local renderAccumulator = 0
 local diagnosticAccumulator = 0
 local heartbeat: RBXScriptConnection? = nil
+local commandChanged: RBXScriptConnection? = nil
+local existingEndpoint = script:FindFirstChild("WeatherControls")
+assert(
+	existingEndpoint == nil or existingEndpoint:IsA("BindableFunction"),
+	"WeatherControls name is occupied"
+)
+local commandEndpoint = (existingEndpoint or Instance.new("BindableFunction")) :: BindableFunction
+commandEndpoint.Name = "WeatherControls"
+commandEndpoint.Parent = script -- server-only developer endpoint, never a client remote.
+local running = true
 
 local speedChanged = script:GetAttributeChangedSignal("SimulationSpeed"):Connect(function()
 	local success, result = pcall(readSimulationSpeed)
@@ -137,15 +165,58 @@ local function printDiagnostics()
 	)
 	print(
 		string.format(
-			"[WEATHERED] frame work=%.2fms steps=%d limit=%d budget=%.1fms reached=%s",
+			"[WEATHERED] frame work=%.2fms steps=%d limit=%d budget=%.1fms reached=%s paused=%s formation remaining=%.2fs requested speed=%.2fx",
 			diagnostics.LastAdvanceMilliseconds,
 			diagnostics.LastAdvanceSteps,
 			diagnostics.MaxCatchUpSteps,
 			diagnostics.FrameBudgetMilliseconds,
-			tostring(diagnostics.FrameBudgetReached)
+			tostring(diagnostics.FrameBudgetReached),
+			tostring(diagnostics.Paused),
+			diagnostics.FormationRemainingSeconds,
+			diagnostics.RequestedSpeed
 		)
 	)
 end
+
+commandEndpoint.OnInvoke = function(command: string, ...: any): any
+	assert(running, "Atmosphere stopped; restart the Studio test")
+	local result = controls:Execute(command, ...)
+	if type(result) == "table" then
+		printDiagnostics()
+	else
+		print("[WEATHERED] " .. tostring(result))
+	end
+	return result
+end
+commandChanged = script:GetAttributeChangedSignal("WeatherCommand"):Connect(function()
+	local command = script:GetAttribute("WeatherCommand")
+	if command == nil or command == "" then
+		return
+	end
+	-- Clear the input so repeating the same command triggers another change.
+	script:SetAttribute("WeatherCommand", "")
+	local success, result = pcall(function()
+		assert(running, "Atmosphere stopped; restart the Studio test")
+		return controls:ExecuteText(command :: string)
+	end)
+	if success then
+		if type(result) == "table" then
+			printDiagnostics()
+		else
+			print("[WEATHERED] " .. tostring(result))
+		end
+		script:SetAttribute(
+			"LastWeatherMessage",
+			if type(result) == "table" then "Diagnostics printed in Output" else tostring(result)
+		)
+	else
+		warn("[WEATHERED] Weather command rejected: " .. tostring(result))
+		script:SetAttribute("LastWeatherMessage", tostring(result))
+	end
+end)
+print(
+	"[WEATHERED] Controls: set this Script's WeatherCommand attribute to help, wind 8 2, spawn Wide Fast, or form 60."
+)
 
 heartbeat = RunService.Heartbeat:Connect(function(frameDt: number)
 	local success, failure = pcall(function()
@@ -155,7 +226,7 @@ heartbeat = RunService.Heartbeat:Connect(function(frameDt: number)
 
 		if renderAccumulator >= DEBUG_RENDER_INTERVAL then
 			renderAccumulator %= DEBUG_RENDER_INTERVAL
-			visibleVoxels = VoxelDebugRenderer.Render(state)
+			visibleVoxels = VoxelDebugRenderer.Render(SimulationController.GetState())
 		end
 
 		if diagnosticAccumulator >= DIAGNOSTIC_INTERVAL then
@@ -165,11 +236,15 @@ heartbeat = RunService.Heartbeat:Connect(function(frameDt: number)
 	end)
 
 	if not success then
+		running = false
 		local connection = heartbeat
 		if connection then
 			connection:Disconnect()
 		end
 		speedChanged:Disconnect()
+		if commandChanged then
+			commandChanged:Disconnect()
+		end
 		warn("[WEATHERED] Atmosphere stopped after simulation/debug failure: " .. tostring(failure))
 	end
 end)

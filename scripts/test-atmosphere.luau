@@ -354,6 +354,10 @@ check(
 testLaptopPerformance(root, loadModule, check, near, rejects, quick)
 local testDebugRenderer = require("../tests/debug-renderer")
 testDebugRenderer(root, loadModule, check, near, rejects)
+local testCloudControls = require("../tests/cloud-controls")
+testCloudControls(root, loadModule, check, near, rejects, quick)
+local testWeatherBootstrap = require("../tests/weather-bootstrap")
+testWeatherBootstrap(root, check, near, rejects)
 
 -- The service shim is only a lookup adapter; the real production controller
 -- owns its accumulator, timestep and catch-up limit during this test.

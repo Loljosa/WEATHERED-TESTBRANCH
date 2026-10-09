@@ -58,6 +58,8 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		ShearV = startup.ShearV,
 		BubbleRelativeHumidity = startup.BubbleRelativeHumidity,
 		BubbleTemperaturePerturbation = startup.BubbleTemperaturePerturbation,
+		BubbleShape = startup.CloudShape,
+		BubbleScale = startup.CloudScale,
 	}
 	local laptop = controller()
 	local state = laptop.Initialize(configuration, {

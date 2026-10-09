@@ -71,6 +71,9 @@ local clock = os.clock
 local lastAdvanceMilliseconds = 0
 local lastAdvanceSteps = 0
 local frameBudgetReached = false
+local paused = false
+local formationRemaining = 0 -- requested physical seconds; never fabricated state.
+local requestedSpeed = 1
 
 SimulationController.FixedDt = FIXED_DT
 SimulationController.MaxCatchUpSteps = MAX_CATCH_UP_STEPS
@@ -141,19 +144,60 @@ function SimulationController.Initialize(
 	return getSimulation(config, display, execution).State
 end
 
+-- Construct first so a rejected sounding leaves the running simulation untouched.
+-- Occasional developer resets allocate a new packed simulation, not per-step tables.
+function SimulationController.Restart(config: Atmosphere.Config): AtmosphereState.AtmosphereState
+	local created = Atmosphere.new(grid, config)
+	simulation = created
+	accumulator, wallTime, droppedTime, nextBacklogWarning = 0, 0, 0, 0
+	lastAdvanceMilliseconds, lastAdvanceSteps = 0, 0
+	frameBudgetReached, paused, formationRemaining = false, false, 0
+	return created.State
+end
+
+function SimulationController.SetWind(u: number, v: number)
+	getSimulation(nil, nil, nil):SetWind(u, v)
+end
+
+function SimulationController.SetPaused(value: boolean)
+	assert(type(value) == "boolean", "Paused must be a boolean")
+	paused = value
+end
+
+-- A bounded preview request. Playback temporarily requests at least 2x, retains
+-- the normal per-frame step/budget limits, and restores the user's speed on finish.
+-- Dropped backlog never counts as completed formation time.
+function SimulationController.QueueFormation(seconds: number)
+	assert(
+		finite(seconds) and seconds >= FIXED_DT and seconds <= 240,
+		"Formation time must be 0.25..240 seconds"
+	)
+	assert(seconds / FIXED_DT % 1 == 0, "Formation time must be a multiple of 0.25 seconds")
+	formationRemaining = seconds
+	paused = false
+end
+
 -- Speed changes the number of fixed physical steps, never their size.
 -- Throws on invalid input or failed physics; the bootstrap stops Heartbeat on failure.
 function SimulationController.Advance(frameDt: number, speed: number?): number
 	assert(finite(frameDt) and frameDt >= 0, "Invalid atmosphere frame dt")
 	local selectedSpeed = SimulationController.ValidateSpeed(speed or 1)
-	local nextAccumulator = accumulator + frameDt * selectedSpeed
+	requestedSpeed = selectedSpeed
+	local effectiveSpeed = if formationRemaining > 0
+		then math.max(selectedSpeed, 2)
+		else selectedSpeed
+	local nextAccumulator = accumulator + (if paused then 0 else frameDt * effectiveSpeed)
 	local nextWallTime = wallTime + frameDt
 	assert(finite(nextAccumulator) and finite(nextWallTime), "Atmosphere accumulator overflowed")
 	local active = getSimulation(nil, nil, nil)
 
-	simulationSpeed = selectedSpeed
+	simulationSpeed = effectiveSpeed
 	wallTime = nextWallTime
 	accumulator = nextAccumulator
+	if paused then
+		lastAdvanceMilliseconds, lastAdvanceSteps, frameBudgetReached = 0, 0, false
+		return 0
+	end
 
 	local started = clock()
 	assert(finite(started), "Atmosphere execution clock must be finite")
@@ -173,6 +217,7 @@ function SimulationController.Advance(frameDt: number, speed: number?): number
 		active:Step(FIXED_DT)
 		accumulator -= FIXED_DT
 		steps += 1
+		formationRemaining = math.max(0, formationRemaining - FIXED_DT)
 	end
 	local elapsed = clock() - started
 	assert(finite(elapsed) and elapsed >= 0, "Atmosphere execution clock must be monotonic")
@@ -227,6 +272,9 @@ function SimulationController.GetDiagnostics()
 		LastAdvanceMilliseconds: number,
 		LastAdvanceSteps: number,
 		FrameBudgetReached: boolean,
+		Paused: boolean,
+		FormationRemainingSeconds: number,
+		RequestedSpeed: number,
 	}
 	diagnostics.DroppedSimulationTime = droppedTime
 	diagnostics.SimulationSpeed = simulationSpeed
@@ -235,6 +283,9 @@ function SimulationController.GetDiagnostics()
 	diagnostics.LastAdvanceMilliseconds = lastAdvanceMilliseconds
 	diagnostics.LastAdvanceSteps = lastAdvanceSteps
 	diagnostics.FrameBudgetReached = frameBudgetReached
+	diagnostics.Paused = paused
+	diagnostics.FormationRemainingSeconds = formationRemaining
+	diagnostics.RequestedSpeed = requestedSpeed
 	return diagnostics
 end
 

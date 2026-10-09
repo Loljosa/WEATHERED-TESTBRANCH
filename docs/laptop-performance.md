@@ -1,4 +1,4 @@
-# Laptop performance: 0.2.3-alpha
+# Laptop performance: 0.2.4-alpha
 
 The server now defaults to a smaller **Laptop** preset and **1× simulation speed**.
 It retains dynamic condensation, three-dimensional winds, conservative bounded
@@ -31,6 +31,8 @@ Before starting, select `ServerScriptService.Weather.WeatherServer` and open
 | `BackgroundU` / `BackgroundV` | 2 / 1 m/s | Physical X/Z wind; stop and restart |
 | `BubbleRelativeHumidity` | 0.999 | Dimensionless moist-core humidity; stop and restart |
 | `BubbleTemperaturePerturbation` | 6 K | Peak potential-temperature excess in the warm bubble; stop and restart |
+| `CloudShape` / `CloudScale` | Round / 1 | Starting warm/moist source shape and radius multiplier; stop and restart |
+| `WeatherCommand` | empty | Live commands, e.g. `wind 8 2`, `spawn Wide Fast`, `form 60` |
 
 Start with Laptop and speed 1. If it still disrupts gameplay, try speed **0.5**
 without restarting: this halves the requested number of fixed physical steps.
@@ -38,6 +40,9 @@ It also doubles the approximate wall time needed for cloud development. Do not
 increase speed to 4 on a machine already struggling to keep up. Speed controls
 time progression rather than changing condensation equations or physical dt.
 No Command Bar or terminal speed command is required.
+The [cloud controls guide](cloud-controls.md) covers live movement, shape/size,
+formation presets, developed-cloud preview, pause and reset. Form temporarily
+requests at least 2x, which costs more CPU; use it for short previews.
 
 For the isolated engine-only Rojo build, choose **Run** to retain the editor
 camera; it contains no floor or spawn. In an existing game with a floor and spawn,
@@ -138,14 +143,14 @@ threshold; it excludes debug rendering, replication and the rest of the game.
 
 | Metric | Laptop | Full |
 | --- | ---: | ---: |
-| Mean physical step | 30.507 ms | 74.735 ms |
-| Maximum physical step | 64.082 ms | 119.488 ms |
+| Mean physical step | 28.880 ms | 70.338 ms |
+| Maximum physical step | 58.812 ms | 136.361 ms |
 | Mean / maximum PCG iterations | 27.11 / 28 | 37.36 / 39 |
-| Estimated physics work at 1× | 122.03 ms/wall second | 298.94 ms/wall second |
+| Estimated physics work at 1× | 115.52 ms/wall second | 281.35 ms/wall second |
 
-For these current 6 K conditions, Laptop uses **59.18% less measured step time**
+For these current 6 K conditions, Laptop uses **58.94% less measured step time**
 than Full. Comparing Laptop at 1× with Full at 2× under these same conditions
-reduces estimated requested physics work by **79.59%**. This compares current
+reduces estimated requested physics work by **79.47%**. This compares current
 presets and requested rates; it does not compare the old 2 K cloud trajectory
 with the new 6 K trajectory or predict a Studio FPS improvement. The estimate
 is `mean_step_ms * SimulationSpeed / 0.25`. Stronger bubble-driven flow can
@@ -214,8 +219,8 @@ and evaporating cloud weights change the qc centroid, so it is not a parcel trac
 Between **30 and 240 simulated seconds**, the qc-weighted centroid moves
 **(427.14, 388.70, 199.78) physical meters** in X/Y/Z, equivalent to approximately
 **(34.17, 46.64, 15.98) display studs** with the Laptop mapping. The focused
-240-second validation averaged **41.02 ms/step** on the contended native host,
-with a maximum 336.37 ms step. It is not a matched performance comparison with
+240-second validation averaged **34.81 ms/step** on the contended native host,
+with a maximum 529.40 ms step. It is not a matched performance comparison with
 the earlier 2 K runs and does not measure Studio FPS. The warmer bubble produces
 more visible debug Parts and stronger flow, which can require more projection work.
 Full retains more spatial detail and more visible cells. A cheaper 12×12×12,
@@ -244,15 +249,16 @@ git status --short --branch
 ```
 
 The focused `--preview-only` run includes all short mathematics, operator, API,
-controller and renderer checks plus the current **240-second 6 K Laptop scenario**,
-passing **867,987 checks**. It writes `build/fast-preview-validation.json` and
-`build/laptop-validation.json`, including source and test fingerprints. Generated reports and place files are
+controller, command/bootstrap and renderer checks plus the **240-second 6 K Laptop scenario**
+and the **240-second Wide/Fast wind/reversal case**, with a matched Normal comparison,
+passing **886,410 checks**. It writes `build/fast-preview-validation.json` and
+`build/laptop-validation.json`, alongside `build/cloud-controls-validation.json`, including source and test fingerprints. Generated reports and place files are
 Git-ignored. For only the short checks, use
-`lune run scripts/test-atmosphere.luau --quick`, which passes **56,921 checks**.
+`lune run scripts/test-atmosphere.luau --quick`, which passes **72,458 checks**.
 
-Running the test script without options still runs all five long scenarios:
+Running the test script without options still runs all six long scenarios:
 scientific baseline, weak wind, strong wind/shear, the legacy 2 K Full-grid
-preview and the current 6 K Laptop preview.
+preview, the current 6 K Laptop preview and the command-driven Wide/Fast case.
 The earlier 0.2.2-alpha full suite passed **8,166,682 checks** with the previous
 2 K preview; its Full-grid results remain historical reference data in
 `build/phase2-validation.json`, and are not a claim of rerunning the current source

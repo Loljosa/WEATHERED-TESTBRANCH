@@ -14,6 +14,8 @@ export type Options = {
 	ShearV: number?, -- (m/s)/m of physical height
 	BubbleRelativeHumidity: number?, -- fraction in (0, 1]; core default remains 0.98.
 	BubbleTemperaturePerturbation: number?, -- warm-core potential-temperature excess, K; default 2.
+	BubbleShape: string?, -- Round, Wide or Tower; shapes initialize theta/qv, never qc.
+	BubbleScale: number?, -- dimensionless radius multiplier, 0.5..1.5; default 1.
 }
 
 export type Profile = {
@@ -48,6 +50,13 @@ function Sounding.Initialize(
 	local shearV = settings.ShearV or 0
 	local bubbleRH = settings.BubbleRelativeHumidity or 0.98
 	local bubbleTemperature = settings.BubbleTemperaturePerturbation or 2
+	local shape = settings.BubbleShape or "Round"
+	local scale = settings.BubbleScale or 1
+	assert(shape == "Round" or shape == "Wide" or shape == "Tower", "Unknown BubbleShape")
+	assert(
+		Validation.IsFinite(scale) and scale >= 0.5 and scale <= 1.5,
+		"BubbleScale must be 0.5..1.5"
+	)
 	assert(Validation.IsFinite(backgroundU), "BackgroundU must be finite")
 	assert(Validation.IsFinite(backgroundV), "BackgroundV must be finite")
 	assert(Validation.IsFinite(shearU), "ShearU must be finite")
@@ -76,9 +85,11 @@ function Sounding.Initialize(
 
 	local centerX = (grid.SizeX + 1) * 0.5
 	local centerZ = (grid.SizeZ + 1) * 0.5
-	local centerY = math.min(3, (grid.SizeY + 1) * 0.5)
-	local radiusX = math.max(1, grid.SizeX * 0.1875)
-	local radiusZ = math.max(1, grid.SizeZ * 0.1875)
+	local centerY = math.min(if shape == "Tower" then 4 else 3, (grid.SizeY + 1) * 0.5)
+	local width = if shape == "Wide" then 0.3 else 0.1875
+	local radiusX = math.max(1, grid.SizeX * width * scale)
+	local radiusZ = math.max(1, grid.SizeZ * width * scale)
+	local radiusY = (if shape == "Tower" then 3 else 2) * scale -- physical height = radiusY * Dy.
 	local layerStride = grid.SizeX * grid.SizeZ
 
 	for y = 1, grid.SizeY do
@@ -113,7 +124,7 @@ function Sounding.Initialize(
 		for z = 1, grid.SizeZ do
 			for x = 1, grid.SizeX do
 				local dx = (x - centerX) / radiusX
-				local dy = (y - centerY) / 2
+				local dy = (y - centerY) / radiusY
 				local dz = (z - centerZ) / radiusZ
 				local radiusSquared = dx * dx + dy * dy + dz * dz
 				local strength = 0

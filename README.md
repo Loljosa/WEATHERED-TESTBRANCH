@@ -129,7 +129,11 @@ while stopped and restart to adjust the display height.
 `BubbleTemperaturePerturbation` defaults to **6 K**; change it while stopped and
 restart to tune the initial buoyancy. Cloud water still forms naturally from
 saturation rather than being seeded. No terminal or Command Bar speed command is
-needed. See the
+needed. The live `WeatherCommand` attribute accepts `wind 8 2`, `spawn Wide Fast`,
+`size 1.25`, `form 60`, `pause`, `resume`, and `status`. Shapes and faster
+formation presets initialize theta/vapor; cloud water still starts at zero.
+See [cloud controls](docs/cloud-controls.md) for shape/size and developed-cloud
+commands, or the
 [Studio procedure](docs/phase2-dynamics.md#studio-preview-and-controls) for cloud
 timing, wind, humidity and display settings.
 

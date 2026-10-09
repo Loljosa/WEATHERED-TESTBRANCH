@@ -2,10 +2,12 @@
 
 Phase 2 combines staggered winds, a pressure projection and conservative scalar
 transport. This revision improves scalar accuracy, pressure-solver cost,
-float32 phase conversion and failed-step isolation. The current 0.2.3-alpha
+float32 phase conversion and failed-step isolation. The current 0.2.4-alpha
 bootstrap retains the Laptop preset and bounded frame work, with a stronger
 6 K warm bubble for earlier visible cloud development. Cloud water still comes
 from condensation of an initially clear warm/moist perturbation.
+Live commands now control wind, shape/size, faster formation presets, developed-
+cloud playback and pause/reset. See [cloud controls](cloud-controls.md).
 
 The Studio bootstrap uses a compact preview above normal terrain. Its debug Parts represent
 the atmospheric field and have no collision or gameplay role. No inventory,
@@ -29,9 +31,14 @@ before starting the test:
 | `BubbleRelativeHumidity` | 0.999 | Relative humidity of the warm/moist core, dimensionless |
 | `BubbleTemperaturePerturbation` | 6 | Peak warm-bubble potential-temperature excess, K |
 | `SimulationSpeed` | 1 | Requested simulated seconds per wall second |
+| `CloudShape` / `CloudScale` | Round / 1 | Starting source shape and radius multiplier |
+| `WeatherCommand` | empty | Live developer command text |
 
-All values except `SimulationSpeed` are read once at startup. Stop the test, change
+All settings except `SimulationSpeed` and `WeatherCommand` are read at startup. Stop the test, change
 the original Script's attributes and restart to change initial conditions.
+Alternatively, use `wind 8 2` for live wind or `spawn Wide Fast`, `size 1.25`,
+and `condensation Fast` to start a new source during a test. `form 60` requests
+60 seconds of real evolution at at least 2x under the existing work limits.
 The core factory retains its scientific defaults: zero wind and perturbation
 relative humidity 0.98 and a 2 K warm bubble. The preview's wetter core, 6 K
 bubble and 2/1 m/s wind are explicit bootstrap settings. The larger thermal
@@ -72,7 +79,7 @@ Studio has not been run in this development environment.
    without an avatar, and the editor camera remains available. This engine-only
    place has no floor or SpawnLocation. Use **Play** or a test server with one
    player when syncing into an existing game place with a floor and spawn.
-   Startup should identify **0.2.3-alpha**. The atmosphere starts cloud-free.
+   Startup should identify **0.2.4-alpha**. The atmosphere starts cloud-free.
 4. Look near workspace **(0, 460, 0)** and watch
    `Workspace.WEATHERED_DEBUG_VOXELS`. Thin cloud cells should appear above the
    center and move in positive X and Z. Select a Part and press **F** to focus it
@@ -381,10 +388,12 @@ transactional failures and controller speed/fixed-step tests. Full scenarios
 cover scientific defaults, prior weak wind, strong wind/shear, the legacy 2 K
 Full-grid preview and the current 6 K Laptop preview when the script runs without
 options. Renderer and execution-budget tests use the actual server modules. The current `--preview-only` validation
-retains all short checks and runs the 240-second Laptop trajectory with the
-new 6 K startup condition, passing **867,987 checks**. It writes ignored
+retains all short checks and runs the 240-second Laptop trajectory plus a
+command-driven Wide/Fast 240-second wind/reversal case. It writes ignored
 `build/fast-preview-validation.json` and `build/laptop-validation.json` with
-source/test fingerprints and logged stdout.
+source/test fingerprints and logged stdout, alongside
+`build/cloud-controls-validation.json`. The previous 0.2.3-alpha focused startup
+run passed **867,987 checks**; see the current cloud-controls guide for new results.
 
 The shorter `lune run scripts/test-atmosphere.luau --quick` suite includes all six
 advection directions, scalar species budgets/bounds, three failed-step
@@ -392,7 +401,7 @@ rollback/retry stages, live speed/display configuration and laptop execution
 controls. Current laptop results and reproducible benchmark instructions are
 recorded in [Laptop performance](laptop-performance.md). The full suite
 previously passed **8,166,682 checks** across five 240-second scenarios at
-0.2.2-alpha with a 2 K preview. Current quick validation passes **56,921 checks**.
+0.2.2-alpha with a 2 K preview. The 0.2.3-alpha quick validation passed **56,921 checks**.
 The earlier `build/phase2-validation.json` is retained as historical data for
 the four Full-grid trajectories; the current focused report validates the changed
 Laptop startup without repeating those unchanged 240-second cases.

@@ -25,6 +25,8 @@ local configuration = {
 	ShearV = startupAttributes.ShearV,
 	BubbleRelativeHumidity = startupAttributes.BubbleRelativeHumidity,
 	BubbleTemperaturePerturbation = startupAttributes.BubbleTemperaturePerturbation,
+	BubbleShape = startupAttributes.CloudShape,
+	BubbleScale = startupAttributes.CloudScale,
 }
 
 local WARMUP_STEPS = 8

@@ -24,6 +24,8 @@ export type Config = {
 	ShearV: number?,
 	BubbleRelativeHumidity: number?,
 	BubbleTemperaturePerturbation: number?,
+	BubbleShape: string?,
+	BubbleScale: number?,
 	MomentumOptions: Momentum.Options?,
 	ProjectionOptions: Projection.Options?,
 	TransportOptions: Transport.Options?,
@@ -87,6 +89,10 @@ export type Simulation = typeof(setmetatable(
 		MomentumCourant: number,
 		TransportCourant: number,
 		StepMilliseconds: number,
+		BackgroundU: number,
+		BackgroundV: number,
+		ShearU: number,
+		ShearV: number,
 	},
 	Simulation
 ))
@@ -117,6 +123,8 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 		ShearV = settings.ShearV,
 		BubbleRelativeHumidity = settings.BubbleRelativeHumidity,
 		BubbleTemperaturePerturbation = settings.BubbleTemperaturePerturbation,
+		BubbleShape = settings.BubbleShape,
+		BubbleScale = settings.BubbleScale,
 	})
 	local geometry = Geometry.new(grid)
 	local faces = FaceVelocity.new(geometry)
@@ -145,9 +153,69 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 		MomentumCourant = 0,
 		TransportCourant = 0,
 		StepMilliseconds = 0,
+		BackgroundU = settings.BackgroundU or 0,
+		BackgroundV = settings.BackgroundV or 0,
+		ShearU = settings.ShearU or 0,
+		ShearV = settings.ShearV or 0,
 	}, Simulation)
 	Validation.CheckState(state)
 	return self
+end
+
+-- Interactive background-wind change, m/s (u=X, v=Z). Shift the MAC faces
+-- AND drag targets, preserving the existing perturbation flow and vertical shear.
+-- Reuse pending storage and validate before committing; moisture is untouched.
+function Simulation:SetWind(u: number, v: number)
+	assert(Validation.IsFinite(u) and math.abs(u) <= 30, "Wind U must be within -30..30 m/s")
+	assert(Validation.IsFinite(v) and math.abs(v) <= 30, "Wind V must be within -30..30 m/s")
+	self.Faces:CheckFinite()
+	local maxU, maxV, maxW = 0, 0, 0
+	local grid = self.State.Grid
+	for y = 0, grid.SizeY - 1 do
+		local height = (y + 0.5) * grid.Dy
+		local targetU, targetV = u + self.ShearU * height, v + self.ShearV * height
+		assert(
+			Validation.IsFinite(targetU) and Validation.IsFinite(targetV),
+			"Wind target overflow"
+		)
+		local deltaU = targetU - buffer.readf32(self.Profile.U, y * 4)
+		local deltaV = targetV - buffer.readf32(self.Profile.V, y * 4)
+		for index = y * self.Geometry.Plane, (y + 1) * self.Geometry.Plane - 1 do
+			local offset = index * 4
+			buffer.writef32(
+				self.PendingFaces.U,
+				offset,
+				buffer.readf32(self.Faces.U, offset) + deltaU
+			)
+			buffer.writef32(
+				self.PendingFaces.V,
+				offset,
+				buffer.readf32(self.Faces.V, offset) + deltaV
+			)
+			local nextU = buffer.readf32(self.PendingFaces.U, offset)
+			local nextV = buffer.readf32(self.PendingFaces.V, offset)
+			assert(Validation.IsFinite(nextU) and Validation.IsFinite(nextV), "Wind face overflow")
+			maxU, maxV = math.max(maxU, math.abs(nextU)), math.max(maxV, math.abs(nextV))
+		end
+	end
+	for offset = 0, buffer.len(self.Faces.W) - 4, 4 do
+		maxW = math.max(maxW, math.abs(buffer.readf32(self.Faces.W, offset)))
+	end
+	assert(
+		Simulation.FixedDt
+				* (maxU / grid.Dx + maxV / grid.Dz + maxW / grid.Dy + self.Momentum.DiffusionRate)
+			<= 0.8,
+		"Wind command would exceed the momentum CFL/diffusion limit"
+	)
+	for y = 0, grid.SizeY - 1 do
+		local height = (y + 0.5) * grid.Dy
+		buffer.writef32(self.Profile.U, y * 4, u + self.ShearU * height)
+		buffer.writef32(self.Profile.V, y * 4, v + self.ShearV * height)
+	end
+	self.Faces.U, self.PendingFaces.U = self.PendingFaces.U, self.Faces.U
+	self.Faces.V, self.PendingFaces.V = self.PendingFaces.V, self.Faces.V
+	self.BackgroundU, self.BackgroundV = u, v
+	self.Faces:WriteCellCenters(self.State)
 end
 
 -- Run against owned staging storage. The protected call uses this static function
