@@ -310,15 +310,17 @@ systems while keeping simulation and rendering independent.
 ## Development activity
 
 <p align="center">
-  <a href="https://github.com/Loljosa"><img src="assets/metrics/isocalendar.svg" alt="Loljosa GitHub contribution calendar; dated public-activity snapshot until automated refresh is enabled" width="840"></a>
+  <a href="https://github.com/Loljosa"><img src="assets/metrics/isocalendar.svg" alt="Full-year Loljosa GitHub contribution calendar rendered by the official lowlighter/metrics Isocalendar plugin" width="840"></a>
 </p>
 
 **39GUN · GitHub account: [Loljosa](https://github.com/Loljosa).** This calendar
 covers account-wide GitHub contributions, not only WEATHERED commits.
-The initial image is a dated public-data snapshot. The optional workflow replaces
-it with a full-year [lowlighter/metrics](https://github.com/lowlighter/metrics)
-isocalendar after you configure `METRICS_TOKEN`.
-[Enable automatic refresh](docs/readme-metrics.md).
+The image is rendered by the official
+[lowlighter/metrics Isocalendar plugin](https://github.com/lowlighter/metrics/tree/master/source/plugins/isocalendar)
+using recorded GitHub contribution data. The included full-year snapshot is
+reproducible offline. Enable daily updates with the `METRICS_TOKEN` repository
+secret and **Actions → README contribution calendar → Run workflow**.
+[Calendar data, reproduction and setup](docs/readme-metrics.md).
 
 ---
 

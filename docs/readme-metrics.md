@@ -1,31 +1,51 @@
-# README contribution calendar
+# Official Isocalendar integration
 
-The README calendar shows **Loljosa's GitHub contribution activity across the account**. It does not measure WEATHERED commits, simulation performance, cloud coverage or the project's completion rate.
+The README displays **Loljosa's account-wide GitHub contributions** using the official [lowlighter/metrics Isocalendar plugin](https://github.com/lowlighter/metrics/tree/master/source/plugins/isocalendar). It describes GitHub activity rather than WEATHERED progress, cloud coverage or simulation performance.
 
-## Included snapshot
+## Included official rendering
 
-The repository includes a calendar at [assets/metrics/isocalendar.svg](../assets/metrics/isocalendar.svg), generated from Loljosa's public GitHub contribution calendar. The recorded dates and public data source are in [isocalendar-source.json](../assets/metrics/isocalendar-source.json). This is a dated snapshot, so the README remains readable before automated updates are enabled.
+[assets/metrics/isocalendar.svg](../assets/metrics/isocalendar.svg) is produced by the actual upstream plugin from a real GitHub GraphQL contribution-calendar response. The pinned plugin is vendored without changes under [vendor/lowlighter-metrics/isocalendar](../vendor/lowlighter-metrics/isocalendar/), with its original MIT license and source hashes. The SVG retains the plugin's own geometry, colors and shading; only trailing whitespace and the outer negative margin used by the Classic card are removed for standalone display.
 
-The isometric presentation follows the [lowlighter/metrics full-year isocalendar](https://github.com/lowlighter/metrics/blob/examples/metrics.plugin.isocalendar.fullyear.svg). The example image belongs to another account; its activity was not copied into WEATHERED's calendar. Once configured, the official Metrics action replaces the bundled image with its own rendering of Loljosa's current contribution data. The JSON file continues to describe the original bundled snapshot.
+[isocalendar-source.json](../assets/metrics/isocalendar-source.json) records the real dates, counts, GitHub colors, capture timestamp, response hash and renderer version. Captured on **October 9, 2026**, it covers **October 5, 2025–October 8, 2026**: **369 days, 10 contributions, four active days**, and a maximum of five contributions in one day. The official full-year renderer aligns its start to Sunday and ends on the previous UTC day. No contribution values were fabricated and no token is stored in the snapshot.
 
-## Optional automatic updates
+The chart is available immediately after importing the files. Automatic refreshing is optional and runs separately on GitHub Actions.
 
-[.github/workflows/metrics.yml](../.github/workflows/metrics.yml) runs daily at **04:17 UTC**, or manually through **Actions → README contribution calendar → Run workflow**. No setup is needed to display the included snapshot.
+## Reproduce the saved snapshot
 
-To enable automatic updates:
+Node.js, already required for the repository's npm tools, can run the renderer without installing another dependency:
 
-1. Create a **classic** GitHub personal access token with **no scopes selected**. Only public contribution data is needed. The pinned Metrics version does not support fine-grained tokens.
-2. In this repository, open **Settings → Secrets and variables → Actions → New repository secret**, name it **`METRICS_TOKEN`**, and paste the token into its secret value. Keep the token out of files and commits.
-3. Allow repository workflows to write contents, then run **README contribution calendar** from the Actions tab. If branch protection disallows automated commits to `main`, the image stays unchanged and Actions reports the failure.
+```bash
+node scripts/render-isocalendar.mjs --check
+```
 
-The action uses `METRICS_TOKEN` to read GitHub account data. It uses the repository's automatic `${{ github.token }}` separately to commit the generated SVG on the existing `main` branch. Upstream requires a personal token for gathering account metrics; a repository-scoped token is not its supported substitute.
+This verifies that the checked-in SVG matches the official rendering of the saved capture. The script verifies the pinned plugin hash, replays its date-range queries against the recorded real data, and fixes the clock to the recorded capture timestamp. It makes no network requests and reads no credentials.
 
-Without the secret, the workflow reports that updates are unconfigured and leaves the snapshot intact. Plugin failures stop the update rather than replacing the image with an error graphic. Refresh commits are made by `github-actions[bot]`; authored project changes use **39GUN**.
+To export the historical snapshot without replacing the README's current image:
 
-## Maintenance
+```bash
+mkdir -p build
+node scripts/render-isocalendar.mjs --output build/isocalendar-snapshot.svg
+```
 
-The generator is pinned to Metrics **3.34.0**, commit [`65836723097537a54cd8eb90f61839426b4266b6`](https://github.com/lowlighter/metrics/commit/65836723097537a54cd8eb90f61839426b4266b6). `use_prebuilt_image: "no"` builds that source instead of pulling the mutable prebuilt image tag. Rendering runs on a GitHub-hosted runner and adds no Roblox or laptop runtime work.
+After the scheduled workflow refreshes the image, `--check` may report a difference because the saved capture remains historical and the full Metrics action adds its Classic template. Use the separate output path to reproduce that original capture. Running the script without options regenerates `assets/metrics/isocalendar.svg` from the saved data.
 
-The workflow writes only `assets/metrics/isocalendar.svg`, skips commits when the rendered data has not changed, and has no push trigger. It does not create branches. Update the pinned SHA deliberately when upgrading Metrics. The workflow configuration was checked against upstream's action inputs; executing it requires the repository secret and a GitHub Actions run.
+## Enable daily updates
 
-References: [isocalendar plugin](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/source/plugins/isocalendar/README.md), [official setup and token requirements](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/.github/readme/partials/documentation/setup/action.md), [action inputs](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/action.yml).
+[.github/workflows/metrics.yml](../.github/workflows/metrics.yml) is configured for a full-year Isocalendar using account `Loljosa`. It runs at **04:17 UTC daily**, or manually through **Actions → README contribution calendar → Run workflow**, and commits the generated image to the existing `main` branch.
+
+1. Push the latest files to this repository's `main` branch on GitHub.
+2. Create a **classic** GitHub personal access token with **no scopes selected**, which is sufficient for public contribution data. The pinned Metrics version does not support fine-grained tokens.
+3. Add it in **Settings → Secrets and variables → Actions → New repository secret**, named **`METRICS_TOKEN`**. Keep the value in GitHub's secret settings.
+4. Run **README contribution calendar** from the Actions tab. Repository policy must permit the job's `contents: write` permission and commits to `main`.
+
+`METRICS_TOKEN` reads account data; the automatic `${{ github.token }}` separately writes the SVG. Without the secret, the workflow leaves the included official snapshot intact and explains the missing setup in its summary. Plugin errors stop the update. Scheduled refreshes produce the full official Classic card, while the JSON remains provenance for the bundled capture.
+
+Refresh commits use `github-actions[bot]`; authored project changes use **39GUN**. The workflow does not create branches and adds no Roblox runtime work.
+
+## Pinned source and validation
+
+Both the offline plugin and the workflow use Metrics **3.34.0**, commit [`65836723097537a54cd8eb90f61839426b4266b6`](https://github.com/lowlighter/metrics/commit/65836723097537a54cd8eb90f61839426b4266b6). The workflow builds the pinned source with `use_prebuilt_image: "no"`, rather than pulling a mutable prebuilt tag. It has no push trigger and skips commits when data has not changed.
+
+Local validation covers fresh GraphQL data comparison, vendor/license hashes, deterministic rendering, SVG structure, light/dark/mobile previews and workflow linting. Actual GitHub Actions execution requires the repository secret and write access; it is separate from the successful offline rendering.
+
+References: [plugin options](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/source/plugins/isocalendar/README.md), [upstream token setup](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/.github/readme/partials/documentation/setup/action.md), [action inputs](https://github.com/lowlighter/metrics/blob/65836723097537a54cd8eb90f61839426b4266b6/action.yml).

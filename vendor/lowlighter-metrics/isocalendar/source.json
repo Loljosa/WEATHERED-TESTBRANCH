@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/lowlighter/metrics",
+  "version": "3.34.0",
+  "commit": "65836723097537a54cd8eb90f61839426b4266b6",
+  "license": "MIT",
+  "files": {
+    "index.mjs": {
+      "upstream_path": "source/plugins/isocalendar/index.mjs",
+      "sha256": "e8b346f344e9aaa03408b4c8675b76b16156d6b3d6b4d7dbaa5b22cfea3f16b6"
+    },
+    "LICENSE": {
+      "upstream_path": "LICENSE",
+      "sha256": "78ee92b1fc51b272401b3f9e8fc4ed539bfd825be47bb31052d961c3711b2fcb"
+    }
+  },
+  "modifications": "None. Upstream plugin and license are vendored byte-for-byte."
+}
