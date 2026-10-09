@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local AtmosphereState = require(script.Parent.AtmosphereState)

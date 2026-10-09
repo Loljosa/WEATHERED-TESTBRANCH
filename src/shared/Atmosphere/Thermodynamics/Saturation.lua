@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local Constants = require(script.Parent.Parent.Core.Constants)

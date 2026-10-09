@@ -319,6 +319,11 @@ rejects(function()
 end, "Excessive momentum Courant number must fail explicitly")
 near(cflSimulation.Time, 0, 0, "A failed CFL check does not advance the clock")
 
+local testLaptopPerformance = require("../tests/laptop-performance")
+testLaptopPerformance(root, loadModule, check, near, rejects, quick)
+local testDebugRenderer = require("../tests/debug-renderer")
+testDebugRenderer(root, loadModule, check, near, rejects)
+
 -- The service shim is only a lookup adapter; the real production controller
 -- owns its accumulator, timestep and catch-up limit during this test.
 local replicatedStorage = { Shared = { Atmosphere = root } }

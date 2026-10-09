@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local Grid3D = require(script.Parent.Core.Grid3D)

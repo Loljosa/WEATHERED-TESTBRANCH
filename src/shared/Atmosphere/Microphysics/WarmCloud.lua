@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local Constants = require(script.Parent.Parent.Core.Constants)
@@ -155,8 +156,12 @@ function WarmCloud.AdjustFloat32(
 	-- qc+delta equals totalWater-vapor but preserves tiny existing qc when
 	-- delta==0, avoiding its loss when adding it to a much larger vapor reservoir.
 	local cloud = roundFloat32(qc + delta, rounding)
-	local adjustedTheta =
-		roundFloat32(theta + LATENT_TEMPERATURE / Thermodynamics.Exner(pressure) * delta, rounding)
+	-- Adjust already validated pressure. With no represented phase transfer,
+	-- latent heating is exactly zero; avoid a redundant Exner power per cell.
+	local heatedTheta = if delta == 0
+		then theta
+		else theta + LATENT_TEMPERATURE / Thermodynamics.Exner(pressure) * delta
+	local adjustedTheta = roundFloat32(heatedTheta, rounding)
 	assert(
 		nonnegativeFinite(vapor) and nonnegativeFinite(cloud),
 		"Coupled phase adjustment produced invalid water"

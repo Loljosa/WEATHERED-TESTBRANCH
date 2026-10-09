@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local AtmosphereState = require(script.Parent.Parent.Core.AtmosphereState)
@@ -158,6 +159,7 @@ end
 -- the hot loops also avoids quantizing the intermediate RK stage.
 local function buildLowFluxes(self: Transport, faces: FaceVelocity.FaceVelocity)
 	local g = self.Geometry
+	local fluxU, fluxV, fluxW, stage = self.FluxU, self.FluxV, self.FluxW, self.Stage
 	for index = 0, g.Count - 1 do
 		local offset = index * 4
 		local u = buffer.readf32(faces.U, offset)
@@ -166,33 +168,29 @@ local function buildLowFluxes(self: Transport, faces: FaceVelocity.FaceVelocity)
 		local donorU = if u >= 0 then buffer.readu32(g.Xm, offset) else index
 		local donorV = if v >= 0 then buffer.readu32(g.Zm, offset) else index
 		local donorW = if w >= 0 then buffer.readu32(g.Ym, offset) else index
-		buffer.writef64(self.FluxU, index * 8, u * buffer.readf64(self.Stage, donorU * 8))
-		buffer.writef64(self.FluxV, index * 8, v * buffer.readf64(self.Stage, donorV * 8))
-		buffer.writef64(self.FluxW, index * 8, w * buffer.readf64(self.Stage, donorW * 8))
+		buffer.writef64(fluxU, index * 8, u * buffer.readf64(stage, donorU * 8))
+		buffer.writef64(fluxV, index * 8, v * buffer.readf64(stage, donorV * 8))
+		buffer.writef64(fluxW, index * 8, w * buffer.readf64(stage, donorW * 8))
 	end
-	buffer.fill(self.FluxW, g.Count * 8, 0, g.Plane * 8)
+	buffer.fill(fluxW, g.Count * 8, 0, g.Plane * 8)
 end
 
 local function lowOrderStage(self: Transport, dt: number)
 	local g = self.Geometry
+	local fluxU, fluxV, fluxW, stage, lowField =
+		self.FluxU, self.FluxV, self.FluxW, self.Stage, self.Low
 	for index = 0, g.Count - 1 do
 		local xp = buffer.readu32(g.Xp, index * 4)
 		local zp = buffer.readu32(g.Zp, index * 4)
-		local divergence = (
-			buffer.readf64(self.FluxU, xp * 8) - buffer.readf64(self.FluxU, index * 8)
-		)
-				/ g.Dx
-			+ (buffer.readf64(self.FluxV, zp * 8) - buffer.readf64(self.FluxV, index * 8)) / g.Dz
-			+ (
-					buffer.readf64(self.FluxW, (index + g.Plane) * 8)
-					- buffer.readf64(self.FluxW, index * 8)
-				)
+		local divergence = (buffer.readf64(fluxU, xp * 8) - buffer.readf64(fluxU, index * 8)) / g.Dx
+			+ (buffer.readf64(fluxV, zp * 8) - buffer.readf64(fluxV, index * 8)) / g.Dz
+			+ (buffer.readf64(fluxW, (index + g.Plane) * 8) - buffer.readf64(fluxW, index * 8))
 				/ g.Dy
-		local low = buffer.readf64(self.Stage, index * 8) - dt * divergence
+		local low = buffer.readf64(stage, index * 8) - dt * divergence
 		if low ~= low or low < 0 or low == math.huge then
 			error("Invalid low-order transport stage at cell " .. tostring(index + 1))
 		end
-		buffer.writef64(self.Low, index * 8, low)
+		buffer.writef64(lowField, index * 8, low)
 	end
 end
 
@@ -213,6 +211,7 @@ end
 -- donor by +/- half an MC slope; therefore A = dt/d * |velocity| * slope/2.
 local function buildCorrections(self: Transport, faces: FaceVelocity.FaceVelocity, dt: number)
 	local g = self.Geometry
+	local fluxU, fluxV, fluxW, stage = self.FluxU, self.FluxV, self.FluxW, self.Stage
 	for index = 0, g.Count - 1 do
 		local offset = index * 4
 		local u = buffer.readf32(faces.U, offset)
@@ -222,22 +221,22 @@ local function buildCorrections(self: Transport, faces: FaceVelocity.FaceVelocit
 		local donorV = if v >= 0 then buffer.readu32(g.Zm, offset) else index
 		local donorW = if w >= 0 then buffer.readu32(g.Ym, offset) else index
 		buffer.writef64(
-			self.FluxU,
+			fluxU,
 			index * 8,
-			0.5 * math.abs(u) * dt / g.Dx * slope(self.Stage, donorU, g.Xm, g.Xp)
+			0.5 * math.abs(u) * dt / g.Dx * slope(stage, donorU, g.Xm, g.Xp)
 		)
 		buffer.writef64(
-			self.FluxV,
+			fluxV,
 			index * 8,
-			0.5 * math.abs(v) * dt / g.Dz * slope(self.Stage, donorV, g.Zm, g.Zp)
+			0.5 * math.abs(v) * dt / g.Dz * slope(stage, donorV, g.Zm, g.Zp)
 		)
 		buffer.writef64(
-			self.FluxW,
+			fluxW,
 			index * 8,
-			0.5 * math.abs(w) * dt / g.Dy * slope(self.Stage, donorW, g.Ym, g.Yp)
+			0.5 * math.abs(w) * dt / g.Dy * slope(stage, donorW, g.Ym, g.Yp)
 		)
 	end
-	buffer.fill(self.FluxW, g.Count * 8, 0, g.Plane * 8)
+	buffer.fill(fluxW, g.Count * 8, 0, g.Plane * 8)
 end
 
 -- Sum signed antidiffusive cell contributions, then budget how much can be
@@ -245,6 +244,8 @@ end
 -- even for a divergent test flow: FCT never conceals compression by clipping.
 local function budgetCorrections(self: Transport)
 	local g = self.Geometry
+	local fluxU, fluxV, fluxW, stage = self.FluxU, self.FluxV, self.FluxW, self.Stage
+	local lowField, rPlus, rMinus = self.Low, self.RPlus, self.RMinus
 	for index = 0, g.Count - 1 do
 		local offset = index * 4
 		local xp = buffer.readu32(g.Xp, offset)
@@ -253,12 +254,12 @@ local function budgetCorrections(self: Transport)
 		local ym = buffer.readu32(g.Ym, offset)
 		local zp = buffer.readu32(g.Zp, offset)
 		local zm = buffer.readu32(g.Zm, offset)
-		local left = buffer.readf64(self.FluxU, index * 8)
-		local right = -buffer.readf64(self.FluxU, xp * 8)
-		local back = buffer.readf64(self.FluxV, index * 8)
-		local front = -buffer.readf64(self.FluxV, zp * 8)
-		local bottom = buffer.readf64(self.FluxW, index * 8)
-		local top = -buffer.readf64(self.FluxW, (index + g.Plane) * 8)
+		local left = buffer.readf64(fluxU, index * 8)
+		local right = -buffer.readf64(fluxU, xp * 8)
+		local back = buffer.readf64(fluxV, index * 8)
+		local front = -buffer.readf64(fluxV, zp * 8)
+		local bottom = buffer.readf64(fluxW, index * 8)
+		local top = -buffer.readf64(fluxW, (index + g.Plane) * 8)
 		local positive = math.max(left, 0)
 			+ math.max(right, 0)
 			+ math.max(back, 0)
@@ -271,23 +272,23 @@ local function budgetCorrections(self: Transport)
 			+ math.max(-front, 0)
 			+ math.max(-bottom, 0)
 			+ math.max(-top, 0)
-		local low = buffer.readf64(self.Low, index * 8)
-		local value = buffer.readf64(self.Stage, index * 8)
-		local vxm = buffer.readf64(self.Stage, xm * 8)
-		local vxp = buffer.readf64(self.Stage, xp * 8)
-		local vym = buffer.readf64(self.Stage, ym * 8)
-		local vyp = buffer.readf64(self.Stage, yp * 8)
-		local vzm = buffer.readf64(self.Stage, zm * 8)
-		local vzp = buffer.readf64(self.Stage, zp * 8)
+		local low = buffer.readf64(lowField, index * 8)
+		local value = buffer.readf64(stage, index * 8)
+		local vxm = buffer.readf64(stage, xm * 8)
+		local vxp = buffer.readf64(stage, xp * 8)
+		local vym = buffer.readf64(stage, ym * 8)
+		local vyp = buffer.readf64(stage, yp * 8)
+		local vzm = buffer.readf64(stage, zm * 8)
+		local vzp = buffer.readf64(stage, zp * 8)
 		local minimum = math.min(low, value, vxm, vxp, vym, vyp, vzm, vzp)
 		local maximum = math.max(low, value, vxm, vxp, vym, vyp, vzm, vzp)
 		buffer.writef64(
-			self.RPlus,
+			rPlus,
 			index * 8,
 			if positive > 0 then math.min(1, (maximum - low) * BUDGET_SAFETY / positive) else 1
 		)
 		buffer.writef64(
-			self.RMinus,
+			rMinus,
 			index * 8,
 			if negative > 0 then math.min(1, (low - minimum) * BUDGET_SAFETY / negative) else 1
 		)
@@ -325,16 +326,17 @@ end
 
 local function correctedStage(self: Transport, original: buffer, output: buffer?, name: string)
 	local g = self.Geometry
+	local fluxU, fluxV, fluxW, stage, low = self.FluxU, self.FluxV, self.FluxW, self.Stage, self.Low
 	for index = 0, g.Count - 1 do
 		local xp = buffer.readu32(g.Xp, index * 4)
 		local zp = buffer.readu32(g.Zp, index * 4)
-		local value = buffer.readf64(self.Low, index * 8)
-			+ buffer.readf64(self.FluxU, index * 8)
-			- buffer.readf64(self.FluxU, xp * 8)
-			+ buffer.readf64(self.FluxV, index * 8)
-			- buffer.readf64(self.FluxV, zp * 8)
-			+ buffer.readf64(self.FluxW, index * 8)
-			- buffer.readf64(self.FluxW, (index + g.Plane) * 8)
+		local value = buffer.readf64(low, index * 8)
+			+ buffer.readf64(fluxU, index * 8)
+			- buffer.readf64(fluxU, xp * 8)
+			+ buffer.readf64(fluxV, index * 8)
+			- buffer.readf64(fluxV, zp * 8)
+			+ buffer.readf64(fluxW, index * 8)
+			- buffer.readf64(fluxW, (index + g.Plane) * 8)
 		if value ~= value or value < 0 or value == math.huge then
 			error("Invalid bounded transport stage at cell " .. tostring(index + 1))
 		end
@@ -344,7 +346,7 @@ local function correctedStage(self: Transport, original: buffer, output: buffer?
 			writeOutput(output, index, 0.5 * (buffer.readf32(original, index * 4) + value), name)
 		else
 			-- Source has been fully consumed by the preceding flux/budget passes.
-			buffer.writef64(self.Stage, index * 8, value)
+			buffer.writef64(stage, index * 8, value)
 		end
 	end
 end

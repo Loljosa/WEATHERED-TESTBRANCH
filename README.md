@@ -40,12 +40,15 @@ saturation, condense cloud water and later evaporate it as conditions change.
 | 3D dynamics | Staggered winds, buoyancy, drag, viscosity and Boussinesq pressure projection |
 | Scalar transport | Bounded conservative flux correction; periodic X/Z and sealed Y boundaries |
 | Time stepping | Fixed 0.25-second steps with bounded catch-up |
-| Debug visualization | Reusable cloud-water voxel Parts, updated at 2 Hz |
+| Debug visualization | Reusable cloud-water voxel Parts, updated at 1 Hz in the default Laptop preset |
 | Validation | Core mathematics, conservative fluxes, projection, numerical failures and 240-second scenarios |
 
-The default grid contains **6,912 cells** (24 × 12 × 24). The Studio preview uses
-**12 × 12 × 12-stud** debug voxels beginning at **Y=24 studs**; physical X/Y/Z
-spacing remains **100 meters**. These scales are separate. The preview explicitly
+The default Studio **Laptop** preset contains **3,072 cells** (16 × 12 × 16), with
+physical X/Y/Z spacing of **150/100/150 meters**. The optional **Full** preset keeps
+the original 6,912 cells (24 × 12 × 24) and 100-meter spacing. Both cover the same
+2,400 × 1,200 × 2,400-meter atmosphere. The Studio preview uses
+**12 × 12 × 12-stud** debug voxels beginning at **Y=24 studs**. Physical and display
+scales are separate. The preview explicitly
 uses a nearly saturated moist core and 2/1 m/s background wind; the core factory
 retains its zero-wind, 98% core-humidity defaults.
 
@@ -57,9 +60,10 @@ transport uses a less diffusive bounded scheme, while the coupled atmosphere
 timestep remains first order. There is no precipitation fallout, terrain
 interaction or sustained surface forcing.
 
-See [Phase 2 dynamics](docs/phase2-dynamics.md) for equations, assumptions, measured
-results and the complete Studio test procedure. The [Phase 1 reference](docs/dynamic-cloud.md)
-records the earlier vertical-only prototype.
+See [Laptop performance](docs/laptop-performance.md) for the presets, measured
+cost and Studio controls. See [Phase 2 dynamics](docs/phase2-dynamics.md) for
+equations, assumptions, measured results and the complete Studio test procedure.
+The [Phase 1 reference](docs/dynamic-cloud.md) records the earlier vertical-only prototype.
 
 ## Development setup
 
@@ -112,10 +116,12 @@ Studio testing remains a separate step. Use **Run** for the isolated engine-only
 build to keep the editor camera; it has no floor or spawn. Use **Play** when syncing
 into an existing game place with a floor and spawn. Watch the server's ten-second
 diagnostics and the `Workspace.WEATHERED_DEBUG_VOXELS` folder near **(0, 60, 0)**.
-Preview settings are Number attributes on `ServerScriptService.Weather.WeatherServer`
-in **Properties → Attributes**. `SimulationSpeed` defaults to **2** and can be
-changed live from **0.25 to 4** in Studio's server view; the physical timestep
-stays 0.25 seconds. No terminal or Command Bar speed command is needed. See the
+Preview settings are attributes on `ServerScriptService.Weather.WeatherServer`
+in **Properties → Attributes**. `PerformancePreset` defaults to **Laptop**; changing
+it to **Full** requires stopping and restarting the test. `SimulationSpeed`
+defaults to **1** and can change live from **0.25 to 4** in Studio's server view;
+the physical timestep stays 0.25 seconds. Try **0.5** on slower hardware.
+No terminal or Command Bar speed command is needed. See the
 [Studio procedure](docs/phase2-dynamics.md#studio-preview-and-controls) for cloud
 timing, wind, humidity and display settings.
 

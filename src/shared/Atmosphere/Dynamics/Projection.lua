@@ -1,3 +1,4 @@
+--!native
 --!strict
 
 local Geometry = require(script.Parent.Parent.Core.Geometry)

@@ -5,9 +5,9 @@ local RunService = game:GetService("RunService")
 
 local Atmosphere = require(ReplicatedStorage.Shared.Atmosphere)
 local SimulationController = require(script.Parent.Simulation.SimulationController)
+local PerformanceSettings = require(script.Parent.Simulation.PerformanceSettings)
 local VoxelDebugRenderer = require(script.Parent.Debug.VoxelDebugRenderer)
 
-local DEBUG_RENDER_INTERVAL = 0.5
 local DIAGNOSTIC_INTERVAL = 10
 
 print("[WEATHERED] Starting atmosphere engine", Atmosphere.GetVersion())
@@ -29,8 +29,14 @@ local function numericAttribute(name: string, default: number): number
 end
 
 local function readSimulationSpeed(): number
-	return SimulationController.ValidateSpeed(numericAttribute("SimulationSpeed", 2))
+	return SimulationController.ValidateSpeed(numericAttribute("SimulationSpeed", 1))
 end
+
+local presetAttribute = script:GetAttribute("PerformancePreset")
+local preset = if presetAttribute == nil then "Laptop" else presetAttribute
+assert(typeof(preset) == "string", "PerformancePreset must be a string script attribute")
+local performance = PerformanceSettings.Resolve(preset :: string)
+local DEBUG_RENDER_INTERVAL = performance.DebugRenderInterval
 
 local state = SimulationController.Initialize({
 	BackgroundU = numericAttribute("BackgroundU", 2),
@@ -41,8 +47,26 @@ local state = SimulationController.Initialize({
 }, {
 	CellSizeStuds = numericAttribute("CellSizeStuds", 12),
 	CloudBottomStuds = numericAttribute("CloudBottomStuds", 24),
+	SizeX = performance.SizeX,
+	SizeY = performance.SizeY,
+	SizeZ = performance.SizeZ,
+	Dx = performance.Dx,
+	Dy = performance.Dy,
+	Dz = performance.Dz,
+}, {
+	MaxCatchUpSteps = performance.MaxCatchUpSteps,
+	FrameBudgetMilliseconds = performance.FrameBudgetMilliseconds,
 })
 local simulationSpeed = readSimulationSpeed()
+print(
+	string.format(
+		"[WEATHERED] PerformancePreset=%s; catch-up <=%d steps/Heartbeat, soft budget=%.0fms; debug %.1fHz",
+		preset :: string,
+		performance.MaxCatchUpSteps,
+		performance.FrameBudgetMilliseconds,
+		1 / DEBUG_RENDER_INTERVAL
+	)
+)
 local visibleVoxels = VoxelDebugRenderer.Render(state)
 local renderAccumulator = 0
 local diagnosticAccumulator = 0
@@ -108,6 +132,16 @@ local function printDiagnostics()
 			diagnostics.CloudCentroidY,
 			diagnostics.CloudCentroidZ,
 			tostring(diagnostics.CloudCentroidDefined)
+		)
+	)
+	print(
+		string.format(
+			"[WEATHERED] frame work=%.2fms steps=%d limit=%d budget=%.1fms reached=%s",
+			diagnostics.LastAdvanceMilliseconds,
+			diagnostics.LastAdvanceSteps,
+			diagnostics.MaxCatchUpSteps,
+			diagnostics.FrameBudgetMilliseconds,
+			tostring(diagnostics.FrameBudgetReached)
 		)
 	)
 end

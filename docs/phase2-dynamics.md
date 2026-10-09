@@ -2,7 +2,8 @@
 
 Phase 2 combines staggered winds, a pressure projection and conservative scalar
 transport. This revision improves scalar accuracy, pressure-solver cost,
-float32 phase conversion and failed-step isolation. Cloud water still comes
+float32 phase conversion and failed-step isolation. The current 0.2.2-alpha
+bootstrap adds a Laptop preset and bounded frame work. Cloud water still comes
 from condensation of an initially clear warm/moist perturbation.
 
 The Studio bootstrap uses a compact, nearby preview. Its debug Parts represent
@@ -11,12 +12,13 @@ movement, world generation, existing rain or final rendering system is changed.
 
 ## Studio preview and controls
 
-The built place supplies Number attributes on
+The built place supplies attributes on
 `ServerScriptService.Weather.WeatherServer`. Set them in **Properties → Attributes**
 before starting the test:
 
 | Attribute | Default | Meaning |
 | --- | --- | --- |
+| `PerformancePreset` | `Laptop` | Startup-only String: `Laptop` or `Full`, selecting grid and execution settings |
 | `CellSizeStuds` | 12 | Display spacing and exact debug Part width/height/depth, Roblox studs |
 | `CloudBottomStuds` | 24 | Bottom of the display domain, workspace Y studs |
 | `BackgroundU` | 2 | Background wind along X, physical m/s |
@@ -24,7 +26,7 @@ before starting the test:
 | `ShearU` | 0 | Change in U per physical meter of height, `(m/s)/m` |
 | `ShearV` | 0 | Change in V per physical meter of height, `(m/s)/m` |
 | `BubbleRelativeHumidity` | 0.999 | Relative humidity of the warm/moist core, dimensionless |
-| `SimulationSpeed` | 2 | Requested simulated seconds per wall second |
+| `SimulationSpeed` | 1 | Requested simulated seconds per wall second |
 
 All values except `SimulationSpeed` are read once at startup. Stop the test, change
 the original Script's attributes and restart to change initial conditions.
@@ -40,11 +42,16 @@ retain the previous valid value. Editing the running copy lasts for that test
 session; set the original Script before starting for a saved preset. No terminal or
 Command Bar speed command is needed.
 
-Speed changes step count, never the **0.25-second** physical timestep. At most
-eight steps execute per callback; excess whole-step backlog is dropped and
-reported as physical simulation time, retaining the fractional remainder.
-Debug rendering remains **2 Hz in wall time** and diagnostics print every ten
-wall seconds, independently of simulation speed.
+Speed changes step count, never the **0.25-second** physical timestep. The default
+Laptop preset permits at most **one step per Heartbeat**; Full permits at most two.
+Both apply a soft **8 ms** physics budget between steps. A physical step cannot be
+interrupted, so its duration may exceed the budget. Excess whole-step backlog is
+dropped and reported as physical simulation time, retaining the fractional
+remainder. Debug rendering runs at **1 Hz in Laptop**, **2 Hz in Full**, and
+diagnostics print every ten wall seconds independently of simulation speed.
+The controller API default remains eight steps for existing callers that do
+not supply execution options. See [Laptop performance](laptop-performance.md)
+for measured costs and the limitations of this scheduling budget.
 
 ### Exact Studio test
 
@@ -61,18 +68,19 @@ Studio has not been run in this development environment.
    without an avatar, and the editor camera remains available. This engine-only
    place has no floor or SpawnLocation. Use **Play** or a test server with one
    player when syncing into an existing game place with a floor and spawn.
-   Startup should identify **0.2.1-alpha**. The atmosphere starts cloud-free.
+   Startup should identify **0.2.2-alpha**. The atmosphere starts cloud-free.
 4. Look near workspace **(0, 60, 0)** and watch
    `Workspace.WEATHERED_DEBUG_VOXELS`. Thin cloud cells should appear above the
    center and move in positive X and Z. Select a Part and press **F** to focus it
    if needed. Each default debug Part is exactly **12 × 12 × 12 studs**.
 5. Compare the diagnostics' **simulation time** with measured cloud timing below.
    The debug threshold is `qc >= 0.00005 kg/kg`. Wall time depends on speed and
-   whether the server can keep up.
+   whether the server can keep up. The Laptop preset first reaches this threshold
+   at **45.5 simulated seconds**, about 46 wall seconds at 1× if the server keeps up.
 6. Select the running Script (switch to server view in Play), and change its
-   `SimulationSpeed` to 1, then 0.5 or 4. Confirm the speed diagnostic changes,
+   `SimulationSpeed` from 1 to 0.5. Confirm the speed diagnostic changes,
    physical dt stays 0.25 s, and
-   cloud evolution slows or accelerates while debug cadence remains unchanged.
+   cloud evolution slows while debug cadence remains unchanged.
    Catch-up warnings mean model time has fallen behind the requested rate.
 7. Continue through **240 simulated seconds**. Check finite wind, small divergence
    of committed faces, nonnegative water, nearly constant water inventory and no
@@ -84,10 +92,14 @@ are separate future work.
 
 ## Coordinates and state
 
-The default grid is **24 × 12 × 24**: 6,912 cells with **Dx = Dy = Dz = 100 m**.
-Its physical dimensions are 2,400 × 1,200 × 2,400 m. The preview uses 12-stud
-spacing and origin `Vector3.new(-144, 24, -144)`, displaying a 288 × 144 × 288-stud
-box. Physical height starts at the model bottom, independently of workspace Y.
+Both preview presets cover **2,400 × 1,200 × 2,400 physical meters**. The default
+Laptop preset is **16 × 12 × 16**, or 3,072 cells, with **Dx = Dz = 150 m** and
+**Dy = 100 m**. Its 12-stud display starts at `Vector3.new(-96, 24, -96)`, forming a
+192 × 144 × 192-stud box. Full retains **24 × 12 × 24**, 6,912 cells with
+**Dx = Dy = Dz = 100 m**, origin `Vector3.new(-144, 24, -144)` and a
+288 × 144 × 288-stud box. The public core/controller default grid remains Full;
+the server bootstrap selects Laptop explicitly. Physical height starts at the
+model bottom, independently of workspace Y.
 
 | Quantity | Location / axis | Units |
 | --- | --- | --- |
@@ -102,9 +114,9 @@ box. Physical height starts at the model bottom, independently of workspace Y.
 Default preview conversion is:
 
 ```text
-worldX = -144 + physicalX*(12/100)
+worldX =  -96 + physicalX*(12/150)
 worldY =   24 + physicalY*(12/100)
-worldZ = -144 + physicalZ*(12/100)
+worldZ =  -96 + physicalZ*(12/150)
 ```
 
 These are display conversions, not a prescription of Roblox object velocity.
@@ -336,7 +348,7 @@ returning it as heat; prescribed pressure and split latent heating do not conser
 global compressible moist energy. The bubble has no continual heating or water
 supply.
 
-## Validation and current measurements
+## Validation and measurements
 
 The CLI is used for build, formatting and mathematical validation:
 
@@ -356,13 +368,24 @@ git status --short --branch
 The production-module loader runs core/buffer checks, manufactured projection,
 scalar accuracy/conservation/bounds, stationary coupled phase checks,
 transactional failures and controller speed/fixed-step tests. Full scenarios
-cover scientific defaults, prior weak wind, strong wind/shear and Studio preview.
+cover scientific defaults, prior weak wind, strong wind/shear and both Studio
+presets. Renderer and execution-budget tests use the actual server modules.
 Reports are written to ignored `build/phase2-validation.json` and logged stdout.
 
-The shorter `lune run scripts/test-atmosphere.luau --quick` suite passes
-**47,099 checks** without the long scenarios. It includes all six advection
-directions, scalar species budgets/bounds, three failed-step rollback/retry
-stages, and live speed/display configuration.
+The shorter `lune run scripts/test-atmosphere.luau --quick` suite includes all six
+advection directions, scalar species budgets/bounds, three failed-step
+rollback/retry stages, live speed/display configuration and laptop execution
+controls. Current laptop results and reproducible benchmark instructions are
+recorded in [Laptop performance](laptop-performance.md). The current full suite
+passes **8,166,682 checks** across five 240-second scenarios; quick validation
+passes **56,409 checks**. `build/phase2-validation.json` contains the four Full-grid
+scenarios and `build/laptop-validation.json` contains the Laptop scenario.
+
+### Full-grid rework measurements at 1d550d3
+
+The measurements below were recorded before the laptop optimization, on the
+24×12×24 grid. They remain reference data for the same numerical model; they are
+not the current default Laptop cloud timing or a matched laptop speed comparison.
 
 For a periodic sine transported at U=4 m/s over 50 s in a 1,000 m domain,
 with Courant number 0.2, scalar RMS errors are:
@@ -378,7 +401,7 @@ scalar accuracy, not the order of the complete split atmosphere. A stationary
 float32 saturation test over 10,000 phase adjustments preserves represented
 qv+qc exactly and leaves qc zero in the tested equilibrium.
 
-The full suite passes **7,346,306 checks**. Each of the four production scenarios
+The rework full suite passed **7,346,306 checks**. Each of its four production scenarios
 executes 960 fixed steps, covering **240 simulated seconds**. The following cloud
 peaks and first visible samples use diagnostics every ten simulated seconds;
 visible cells satisfy `qc >= 0.00005 kg/kg`.
@@ -400,7 +423,7 @@ sampled diagnostics; its absence of visible voxels is not a solver failure.
 
 The preview additionally checks qc after every 0.25-second step. Its first
 positive cloud water is at **10.25 simulated seconds**, and its first cell reaches
-the display threshold at **39.25 seconds**. At the requested `SimulationSpeed=2`,
+the display threshold at **39.25 seconds**. At that revision's requested `SimulationSpeed=2`,
 these correspond to about 5.13 and 19.63 wall seconds if the server keeps up.
 At 240 seconds, it has 33 visible cells and a peak qc of 0.000412259 kg/kg.
 From the 40-second sample to 240 seconds, its qc-weighted centroid moves
@@ -410,7 +433,7 @@ From the 40-second sample to 240 seconds, its qc-weighted centroid moves
 Condensation and evaporation change the centroid weights, so this displacement
 does not measure a single parcel's travel.
 
-All current final water drifts are below 0.0001% in magnitude, compared with the
+All these recorded final water drifts are below 0.0001% in magnitude, compared with the
 historical vertical-only Phase 1 result of **−0.19963%** over 240 seconds.
 This does not establish a reduction in every conservative Phase 2 scenario:
 the default's absolute drift increases from 0.00000934% at f774c51 to
@@ -424,13 +447,18 @@ measurements, not verified Studio screenshots.
 ## Performance
 
 Dynamics retain packed buffers and reusable storage, without per-cell tables,
-Vector3 construction or Instance lookups. Transactional storage and FCT add
-buffers/passes; pressure optimization reduces other work. Each current simulation
-owns **58 unique buffers totaling 1,894,092 bytes**, unchanged between the beginning
-and end of every 960-step scenario. This counts buffers reachable from the
-simulation, excluding Lua table overhead, the debug Part pool and replication.
-The historical first-order Phase 2 simulation owned 39 buffers totaling
-1,255,872 bytes.
+Vector3 construction or Instance lookups. Laptop owns **58 unique buffers totaling
+841,932 bytes**; Full owns 58 totaling **1,894,092 bytes**. These are reachable
+simulation buffers, excluding Lua tables, debug Parts, cached renderer properties
+and replication. Neither preset changes the solver tolerances, fixed timestep,
+transport scheme or transactional validation. Current cost measurements and
+renderer/native-code changes are documented in [Laptop performance](laptop-performance.md).
+
+### Historical full-grid timing at 1d550d3
+
+Transactional storage and FCT added buffers/passes; pressure optimization reduced
+other work. The historical first-order Phase 2 simulation owned 39 buffers
+totaling 1,255,872 bytes.
 
 An alternating-order comparison on **120 identical 24×12×24 production pressure
 inputs**, with unchanged strict tolerances, measured **57.605 → 40.230 ms/call**
@@ -439,7 +467,7 @@ inputs**, with unchanged strict tolerances, measured **57.605 → 40.230 ms/call
 This isolates pressure cost; it is not a whole-simulation speedup or Studio
 benchmark.
 
-The complete native Lune run on this contended host measured:
+The complete native Lune run at 1d550d3 on this contended host measured:
 
 | Scenario | Mean step (ms) | Maximum step (ms) | 960-step scenario runtime (s) |
 | --- | --- | --- | --- |
@@ -454,9 +482,10 @@ includes diagnostic/test work. The report does not time each stage separately;
 the matched-input pressure benchmark above isolates that stage. Large maximum
 durations reflect this host's variable load and are included rather than removed.
 
-Native timings describe this host and its load. Profile in Studio before growing
-the grid. Debug updates remain 2 Hz in wall time, with a 1,200-Part cap and at
-most 128 creations per update. Physical state is not stored in Parts.
+Native timings describe that host and load. Profile in Studio before growing
+the grid. The current renderer retains a 1,200-Part cap, creates at most **32**
+Parts per update and avoids property writes for unchanged cells; Laptop renders
+at 1 Hz and Full at 2 Hz. Physical state is not stored in Parts.
 
 ## Historical first-order Phase 2 baseline
 
