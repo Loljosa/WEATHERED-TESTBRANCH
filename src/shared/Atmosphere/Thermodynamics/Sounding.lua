@@ -8,6 +8,7 @@ local Validation = require(script.Parent.Parent.Utilities.Validation)
 local Sounding = {}
 
 export type Options = {
+	DisableBubble: boolean?, -- explicit clear environmental background for seeded sources.
 	BackgroundU: number?, -- m/s at the model bottom
 	BackgroundV: number?, -- m/s at the model bottom
 	ShearU: number?, -- (m/s)/m of physical height
@@ -44,6 +45,10 @@ function Sounding.Initialize(
 		"Physical cell height must be positive and finite"
 	)
 	local settings: Options = options or {}
+	assert(
+		settings.DisableBubble == nil or type(settings.DisableBubble) == "boolean",
+		"DisableBubble must be boolean"
+	)
 	local backgroundU = settings.BackgroundU or 0
 	local backgroundV = settings.BackgroundV or 0
 	local shearU = settings.ShearU or 0
@@ -128,7 +133,12 @@ function Sounding.Initialize(
 				local dz = (z - centerZ) / radiusZ
 				local radiusSquared = dx * dx + dy * dy + dz * dz
 				local strength = 0
-				if radiusSquared < 1 and y > 1 and y < grid.SizeY then
+				if
+					not settings.DisableBubble
+					and radiusSquared < 1
+					and y > 1
+					and y < grid.SizeY
+				then
 					-- A moist core with a smooth edge survives coarse-grid upwind
 					-- dilution; a narrow Gaussian disappears before it can rise.
 					if radiusSquared <= 0.25 then

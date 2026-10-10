@@ -6,6 +6,7 @@ local AtmosphereRoot = ReplicatedStorage.Shared.Atmosphere
 local Atmosphere = require(AtmosphereRoot)
 local Grid3D = require(AtmosphereRoot.Core.Grid3D)
 local AtmosphereState = require(AtmosphereRoot.Core.AtmosphereState)
+local CloudSourceManager = require(script.Parent.CloudSourceManager)
 
 local SimulationController = {}
 
@@ -25,6 +26,8 @@ export type ExecutionOptions = {
 	FrameBudgetMilliseconds: number?, -- soft budget: a physical step cannot be interrupted.
 	Clock: (() -> number)?, -- monotonic seconds; production uses os.clock.
 }
+
+export type GenerationOptions = CloudSourceManager.Settings & { SeedSource: string? }
 
 -- Simulation seconds, independent of Roblox's Heartbeat frequency and preview speed.
 local FIXED_DT = Atmosphere.FixedDt
@@ -74,6 +77,13 @@ local frameBudgetReached = false
 local paused = false
 local formationRemaining = 0 -- requested physical seconds; never fabricated state.
 local requestedSpeed = 1
+local sourceManager: CloudSourceManager.CloudSourceManager? = nil
+local activeGeneration: GenerationOptions? = nil
+local movementTime: number? = nil
+local previousCentroidX, previousCentroidY, previousCentroidZ = 0, 0, 0
+local previousCentroidDefined = false
+local centroidDeltaX, centroidDeltaY, centroidDeltaZ, centroidDeltaSeconds = 0, 0, 0, 0
+local centroidMovementDefined = false
 
 SimulationController.FixedDt = FIXED_DT
 SimulationController.MaxCatchUpSteps = MAX_CATCH_UP_STEPS
@@ -88,10 +98,51 @@ function SimulationController.ValidateSpeed(speed: number): number
 	return speed
 end
 
+local function clearMovementDiagnostics()
+	movementTime = nil
+	previousCentroidDefined, centroidMovementDefined = false, false
+	centroidDeltaX, centroidDeltaY, centroidDeltaZ, centroidDeltaSeconds = 0, 0, 0, 0
+end
+
+-- Generation uses a physical world-region origin, independent of the display
+-- Origin in studs. The default models a 2.4 km region centered at world X/Z=0.
+local function createSimulation(
+	selectedGrid: Grid3D.Grid3D,
+	config: Atmosphere.Config?,
+	generation: GenerationOptions?
+): (Atmosphere.Simulation, CloudSourceManager.CloudSourceManager?)
+	local settings = table.clone(config or {})
+	if generation ~= nil then
+		settings.DisableBubble = true
+	end
+	local created = Atmosphere.new(selectedGrid, settings)
+	if generation == nil then
+		return created, nil
+	end
+	local sourceSettings = table.clone(generation)
+	if sourceSettings.Region == nil then
+		sourceSettings.Region = {
+			OriginX = -selectedGrid.SizeX * selectedGrid.Dx * 0.5,
+			OriginY = 0,
+			OriginZ = -selectedGrid.SizeZ * selectedGrid.Dz * 0.5,
+			SizeX = selectedGrid.SizeX * selectedGrid.Dx,
+			SizeY = selectedGrid.SizeY * selectedGrid.Dy,
+			SizeZ = selectedGrid.SizeZ * selectedGrid.Dz,
+			Dx = selectedGrid.Dx,
+			Dy = selectedGrid.Dy,
+			Dz = selectedGrid.Dz,
+		}
+	end
+	local manager = CloudSourceManager.new(created, sourceSettings)
+	manager:InitializeSources()
+	return created, manager
+end
+
 local function getSimulation(
 	config: Atmosphere.Config?,
 	display: DisplayOptions?,
-	execution: ExecutionOptions?
+	execution: ExecutionOptions?,
+	generation: GenerationOptions?
 ): Atmosphere.Simulation
 	local existing = simulation
 	if existing then
@@ -112,9 +163,12 @@ local function getSimulation(
 		assert(finite(budget) and budget > 0, "FrameBudgetMilliseconds must be finite and positive")
 	end
 	assert(options.Clock == nil or type(options.Clock) == "function", "Clock must be a function")
-	local created = Atmosphere.new(selectedGrid, config)
+	local created, manager = createSimulation(selectedGrid, config, generation)
 	grid = selectedGrid
 	simulation = created
+	sourceManager = manager
+	activeGeneration = if generation then table.clone(generation) else nil
+	clearMovementDiagnostics()
 	maxCatchUpSteps = selectedMaxSteps
 	frameBudgetSeconds = if budget then budget / 1000 else nil
 	clock = options.Clock or os.clock
@@ -139,24 +193,77 @@ end
 function SimulationController.Initialize(
 	config: Atmosphere.Config?,
 	display: DisplayOptions?,
-	execution: ExecutionOptions?
+	execution: ExecutionOptions?,
+	generation: GenerationOptions?
 ): AtmosphereState.AtmosphereState
-	return getSimulation(config, display, execution).State
+	return getSimulation(config, display, execution, generation).State
 end
 
 -- Construct first so a rejected sounding leaves the running simulation untouched.
 -- Occasional developer resets allocate a new packed simulation, not per-step tables.
-function SimulationController.Restart(config: Atmosphere.Config): AtmosphereState.AtmosphereState
-	local created = Atmosphere.new(grid, config)
+function SimulationController.Restart(
+	config: Atmosphere.Config,
+	generation: GenerationOptions?
+): AtmosphereState.AtmosphereState
+	local created, manager = createSimulation(grid, config, generation)
 	simulation = created
+	sourceManager = manager
+	activeGeneration = if generation then table.clone(generation) else nil
+	clearMovementDiagnostics()
 	accumulator, wallTime, droppedTime, nextBacklogWarning = 0, 0, 0, 0
 	lastAdvanceMilliseconds, lastAdvanceSteps = 0, 0
 	frameBudgetReached, paused, formationRemaining = false, false, 0
 	return created.State
 end
 
+function SimulationController.Regenerate(
+	config: Atmosphere.Config,
+	generation: GenerationOptions
+): AtmosphereState.AtmosphereState
+	return SimulationController.Restart(config, generation)
+end
+
+function SimulationController.SpawnSeeded(): string
+	local manager = sourceManager
+	assert(manager ~= nil, "Seeded generation is inactive; use regenerate first")
+	return manager:QueueSource()
+end
+
+function SimulationController.SetAutoClouds(enabled: boolean)
+	assert(type(enabled) == "boolean", "AutoClouds must be a boolean")
+	local manager = sourceManager
+	assert(manager ~= nil, "Seeded generation is inactive; use regenerate first")
+	manager:SetAutoClouds(enabled)
+	if activeGeneration then
+		activeGeneration.AutoClouds = enabled
+	end
+end
+
+function SimulationController.GetSeedStatus(): { [string]: any }
+	local manager = sourceManager
+	local result = if manager then manager:GetDiagnostics() else {}
+	(result :: any).SeededGeneration = manager ~= nil
+	(result :: any).SeedSource = if activeGeneration
+		then activeGeneration.SeedSource or "Configured"
+		else "LegacyBubble"
+	if manager then
+		local status = result :: any
+		status.SourceRegionOriginXMeters = manager.Region.OriginX
+		status.SourceRegionOriginYMeters = manager.Region.OriginY
+		status.SourceRegionOriginZMeters = manager.Region.OriginZ
+		status.SourceRegionSizeXMeters = manager.Region.SizeX
+		status.SourceRegionSizeYMeters = manager.Region.SizeY
+		status.SourceRegionSizeZMeters = manager.Region.SizeZ
+		status.SourceFormationIntervalTicks = manager.Scheduler.IntervalTicks
+		status.SourceFormationProbability = manager.Scheduler.FormationProbability
+		status.SourceFormationDurationSeconds = manager.FormationDurationSeconds
+		status.SourceBuildSamplesPerStep = manager.BuildSamplesPerStep
+	end
+	return result :: any
+end
+
 function SimulationController.SetWind(u: number, v: number)
-	getSimulation(nil, nil, nil):SetWind(u, v)
+	getSimulation(nil, nil, nil, nil):SetWind(u, v)
 end
 
 function SimulationController.SetPaused(value: boolean)
@@ -189,7 +296,7 @@ function SimulationController.Advance(frameDt: number, speed: number?): number
 	local nextAccumulator = accumulator + (if paused then 0 else frameDt * effectiveSpeed)
 	local nextWallTime = wallTime + frameDt
 	assert(finite(nextAccumulator) and finite(nextWallTime), "Atmosphere accumulator overflowed")
-	local active = getSimulation(nil, nil, nil)
+	local active = getSimulation(nil, nil, nil, nil)
 
 	simulationSpeed = effectiveSpeed
 	wallTime = nextWallTime
@@ -214,7 +321,13 @@ function SimulationController.Advance(frameDt: number, speed: number?): number
 				break
 			end
 		end
-		active:Step(FIXED_DT)
+		local manager = sourceManager
+		local nextTick = math.floor(active.Time / FIXED_DT + 0.5) + 1
+		local forcing = if manager then manager:PrepareStep(nextTick, FIXED_DT) else nil
+		active:Step(FIXED_DT, forcing)
+		if manager then
+			manager:CommitStep(nextTick)
+		end
 		accumulator -= FIXED_DT
 		steps += 1
 		formationRemaining = math.max(0, formationRemaining - FIXED_DT)
@@ -252,7 +365,7 @@ function SimulationController.Advance(frameDt: number, speed: number?): number
 end
 
 function SimulationController.GetState(): AtmosphereState.AtmosphereState
-	return getSimulation(nil, nil, nil).State
+	return getSimulation(nil, nil, nil, nil).State
 end
 
 function SimulationController.GetGrid(): Grid3D.Grid3D
@@ -260,22 +373,64 @@ function SimulationController.GetGrid(): Grid3D.Grid3D
 end
 
 function SimulationController.GetTime(): number
-	return getSimulation(nil, nil, nil).Time
+	return getSimulation(nil, nil, nil, nil).Time
 end
 
 function SimulationController.GetDiagnostics()
-	local diagnostics = getSimulation(nil, nil, nil):GetDiagnostics() :: Atmosphere.Diagnostics & {
-		DroppedSimulationTime: number,
-		SimulationSpeed: number,
-		MaxCatchUpSteps: number,
-		FrameBudgetMilliseconds: number,
-		LastAdvanceMilliseconds: number,
-		LastAdvanceSteps: number,
-		FrameBudgetReached: boolean,
-		Paused: boolean,
-		FormationRemainingSeconds: number,
-		RequestedSpeed: number,
-	}
+	local diagnostics =
+		getSimulation(nil, nil, nil, nil):GetDiagnostics() :: Atmosphere.Diagnostics & {
+			DroppedSimulationTime: number,
+			SimulationSpeed: number,
+			MaxCatchUpSteps: number,
+			FrameBudgetMilliseconds: number,
+			LastAdvanceMilliseconds: number,
+			LastAdvanceSteps: number,
+			FrameBudgetReached: boolean,
+			Paused: boolean,
+			FormationRemainingSeconds: number,
+			RequestedSpeed: number,
+			CloudMovementDefined: boolean,
+			CloudCentroidDeltaSeconds: number,
+			CloudCentroidDeltaXMeters: number,
+			CloudCentroidDeltaYMeters: number,
+			CloudCentroidDeltaZMeters: number,
+			CloudCentroidDeltaXStuds: number,
+			CloudCentroidDeltaYStuds: number,
+			CloudCentroidDeltaZStuds: number,
+		}
+	if movementTime ~= diagnostics.Time then
+		centroidDeltaSeconds = if movementTime then diagnostics.Time - movementTime else 0
+		centroidMovementDefined = previousCentroidDefined
+			and diagnostics.CloudCentroidDefined
+			and centroidDeltaSeconds > 0
+		if centroidMovementDefined then
+			local lengthX, lengthZ = grid.SizeX * grid.Dx, grid.SizeZ * grid.Dz
+			centroidDeltaX = (diagnostics.CloudCentroidX - previousCentroidX + lengthX * 0.5)
+					% lengthX
+				- lengthX * 0.5
+			centroidDeltaY = diagnostics.CloudCentroidY - previousCentroidY
+			centroidDeltaZ = (diagnostics.CloudCentroidZ - previousCentroidZ + lengthZ * 0.5)
+					% lengthZ
+				- lengthZ * 0.5
+		else
+			centroidDeltaX, centroidDeltaY, centroidDeltaZ = 0, 0, 0
+		end
+		movementTime = diagnostics.Time
+		previousCentroidX, previousCentroidY, previousCentroidZ =
+			diagnostics.CloudCentroidX, diagnostics.CloudCentroidY, diagnostics.CloudCentroidZ
+		previousCentroidDefined = diagnostics.CloudCentroidDefined
+	end
+	diagnostics.CloudMovementDefined = centroidMovementDefined
+	diagnostics.CloudCentroidDeltaSeconds = centroidDeltaSeconds
+	diagnostics.CloudCentroidDeltaXMeters = centroidDeltaX
+	diagnostics.CloudCentroidDeltaYMeters = centroidDeltaY
+	diagnostics.CloudCentroidDeltaZMeters = centroidDeltaZ
+	diagnostics.CloudCentroidDeltaXStuds = centroidDeltaX * grid.CellSize / grid.Dx
+	diagnostics.CloudCentroidDeltaYStuds = centroidDeltaY * grid.CellSize / grid.Dy
+	diagnostics.CloudCentroidDeltaZStuds = centroidDeltaZ * grid.CellSize / grid.Dz
+	for name, value in SimulationController.GetSeedStatus() do
+		(diagnostics :: any)[name] = value
+	end
 	diagnostics.DroppedSimulationTime = droppedTime
 	diagnostics.SimulationSpeed = simulationSpeed
 	diagnostics.MaxCatchUpSteps = maxCatchUpSteps

@@ -11,6 +11,9 @@ local Momentum = require(script.Parent.Dynamics.Momentum)
 local Projection = require(script.Parent.Dynamics.Projection)
 local Transport = require(script.Parent.Dynamics.Transport)
 local Validation = require(script.Parent.Utilities.Validation)
+local Constants = require(script.Parent.Core.Constants)
+local Thermodynamics = require(script.Parent.Thermodynamics.Thermodynamics)
+local Saturation = require(script.Parent.Thermodynamics.Saturation)
 
 local Simulation = {}
 Simulation.__index = Simulation
@@ -18,6 +21,7 @@ Simulation.FixedDt = 0.25 -- physical seconds, independent of Heartbeat dt.
 Simulation.CellHeightMeters = 100 -- legacy default; each grid owns its actual Dy.
 
 export type Config = {
+	DisableBubble: boolean?,
 	BackgroundU: number?,
 	BackgroundV: number?,
 	ShearU: number?,
@@ -31,6 +35,19 @@ export type Config = {
 	TransportOptions: Transport.Options?,
 }
 
+-- Cached absolute targets, not increments or visible cloud geometry. WaterTarget
+-- bounds TOTAL qv+qc+qr (kg/kg). Finite domain budgets prevent sealed-box buildup.
+export type SourceForcing = {
+	ThetaTarget: buffer,
+	WaterTarget: buffer,
+	Weights: buffer?, -- optional smooth local support [0,1]; absent means all cells.
+	Fraction: number, -- 0..1 relaxation fraction for this application.
+	MaxWaterSum: number, -- available unweighted mixing-ratio sum, not kg.
+	MaxThetaSum: number, -- available summed potential-temperature increment, K.
+}
+
+export type SourceInput = { WaterSum: number, ThetaSum: number, EnthalpySum: number }
+
 export type Diagnostics = {
 	Time: number,
 	CloudCells: number,
@@ -42,6 +59,10 @@ export type Diagnostics = {
 	QrSum: number,
 	WaterSum: number, -- unweighted cell mixing-ratio sum, kg/kg summed over cells.
 	WaterDriftFraction: number,
+	RawWaterChangeFraction: number,
+	ExternalWaterSum: number,
+	ExternalThetaSum: number,
+	ExternalEnthalpySum: number, -- summed J/kg dry air, NOT domain joules.
 	MinU: number,
 	MaxU: number,
 	MinV: number,
@@ -84,6 +105,10 @@ export type Simulation = typeof(setmetatable(
 		ProjectionBackup: buffer,
 		ProjectionDiagnosticsBackup: Projection.Diagnostics,
 		PhaseRounding: buffer,
+		ExternalWaterSum: number,
+		ExternalThetaSum: number,
+		ExternalEnthalpySum: number,
+		LastSourceInput: SourceInput,
 		Time: number,
 		InitialWaterSum: number,
 		MomentumCourant: number,
@@ -117,6 +142,7 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 	local settings = config or {}
 	local state = AtmosphereState.new(grid)
 	local profile = Sounding.Initialize(state, grid.Dy, {
+		DisableBubble = settings.DisableBubble,
 		BackgroundU = settings.BackgroundU,
 		BackgroundV = settings.BackgroundV,
 		ShearU = settings.ShearU,
@@ -148,6 +174,10 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 		ProjectionBackup = buffer.create(geometry.Count * 8),
 		ProjectionDiagnosticsBackup = table.clone(projection.Last),
 		PhaseRounding = buffer.create(12),
+		ExternalWaterSum = 0,
+		ExternalThetaSum = 0,
+		ExternalEnthalpySum = 0,
+		LastSourceInput = { WaterSum = 0, ThetaSum = 0, EnthalpySum = 0 },
 		Time = 0,
 		InitialWaterSum = waterSum(state),
 		MomentumCourant = 0,
@@ -160,6 +190,180 @@ function Simulation.new(grid: Grid3D.Grid3D, config: Config?): Simulation
 	}, Simulation)
 	Validation.CheckState(state)
 	return self
+end
+
+local function validateForcing(self: Simulation, forcing: SourceForcing)
+	local bytes = self.Geometry.Count * 4
+	assert(
+		typeof(forcing.ThetaTarget) == "buffer" and buffer.len(forcing.ThetaTarget) == bytes,
+		"Source theta target must match the grid"
+	)
+	assert(
+		typeof(forcing.WaterTarget) == "buffer" and buffer.len(forcing.WaterTarget) == bytes,
+		"Source water target must match the grid"
+	)
+	assert(
+		forcing.Weights == nil
+			or (typeof(forcing.Weights) == "buffer" and buffer.len(forcing.Weights) == bytes),
+		"Source weights must match the grid"
+	)
+	assert(
+		Validation.IsFinite(forcing.Fraction) and forcing.Fraction >= 0 and forcing.Fraction <= 1,
+		"Source fraction must be 0..1"
+	)
+	assert(
+		Validation.IsFinite(forcing.MaxWaterSum) and forcing.MaxWaterSum >= 0,
+		"Source water budget must be finite and nonnegative"
+	)
+	assert(
+		Validation.IsFinite(forcing.MaxThetaSum) and forcing.MaxThetaSum >= 0,
+		"Source thermal budget must be finite and nonnegative"
+	)
+end
+
+-- Reuse phase-rounding scratch. Account represented float32 deltas; discard a
+-- sub-ULP request that rounds beyond a remaining budget instead of overspending.
+local function boundedAddition(
+	old: number,
+	requested: number,
+	remaining: number,
+	scratch: buffer
+): number
+	local allowance = math.min(requested, remaining)
+	buffer.writef32(scratch, 0, old + allowance)
+	local candidate = buffer.readf32(scratch, 0)
+	assert(Validation.IsFinite(candidate), "Source float32 overflow")
+	if candidate - old > allowance then
+		-- A lower float32 neighbor preserves the proportional cell allowance.
+		-- Positive fields have monotone float bits; old is already representable.
+		buffer.writeu32(scratch, 0, buffer.readu32(scratch, 0) - 1)
+		candidate = buffer.readf32(scratch, 0)
+	end
+	return if candidate >= old and candidate - old <= remaining then candidate else old
+end
+
+local function applyForcing(
+	self: Simulation,
+	state: AtmosphereState.AtmosphereState,
+	forcing: SourceForcing
+): (number, number, number)
+	validateForcing(self, forcing)
+	local fields = state.Fields
+	local weights = forcing.Weights
+	local waterRequested, thetaRequested = 0, 0
+	-- Determine a global allowance before writing any cell. Budget exhaustion
+	-- scales the entire source, instead of preferentially heating the first rows.
+	for offset = 0, self.Geometry.Count * 4 - 4, 4 do
+		local weight = if weights then buffer.readf32(weights, offset) else 1
+		assert(
+			Validation.IsFinite(weight) and weight >= 0 and weight <= 1,
+			"Source weights must be in [0,1]"
+		)
+		local thetaTarget = buffer.readf32(forcing.ThetaTarget, offset)
+		local waterTarget = buffer.readf32(forcing.WaterTarget, offset)
+		assert(
+			Validation.IsFinite(thetaTarget) and thetaTarget > 0,
+			"Source theta target must be finite and positive"
+		)
+		assert(
+			Validation.IsFinite(waterTarget) and waterTarget >= 0,
+			"Source water target must be finite and nonnegative"
+		)
+		local theta = buffer.readf32(fields.theta, offset)
+		local qv = buffer.readf32(fields.qv, offset)
+		local totalWater = qv
+			+ buffer.readf32(fields.qc, offset)
+			+ buffer.readf32(fields.qr, offset)
+		thetaRequested += math.max(0, thetaTarget - theta) * forcing.Fraction * weight
+		waterRequested += math.max(0, waterTarget - totalWater) * forcing.Fraction * weight
+	end
+	assert(
+		Validation.IsFinite(thetaRequested) and Validation.IsFinite(waterRequested),
+		"Requested source input overflow"
+	)
+	local thetaScale = if thetaRequested > 0
+		then math.min(1, forcing.MaxThetaSum / thetaRequested)
+		else 1
+	local waterScale = if waterRequested > 0
+		then math.min(1, forcing.MaxWaterSum / waterRequested)
+		else 1
+	local waterSumAdded, thetaSumAdded, enthalpySumAdded = 0, 0, 0
+	for offset = 0, self.Geometry.Count * 4 - 4, 4 do
+		local weight = if weights then buffer.readf32(weights, offset) else 1
+		local thetaTarget = buffer.readf32(forcing.ThetaTarget, offset)
+		local waterTarget = buffer.readf32(forcing.WaterTarget, offset)
+		local theta = buffer.readf32(fields.theta, offset)
+		local qv = buffer.readf32(fields.qv, offset)
+		local totalWater = qv
+			+ buffer.readf32(fields.qc, offset)
+			+ buffer.readf32(fields.qr, offset)
+		local nextTheta = boundedAddition(
+			theta,
+			math.max(0, thetaTarget - theta) * forcing.Fraction * weight * thetaScale,
+			forcing.MaxThetaSum - thetaSumAdded,
+			self.PhaseRounding
+		)
+		local nextQv = boundedAddition(
+			qv,
+			math.max(0, waterTarget - totalWater) * forcing.Fraction * weight * waterScale,
+			forcing.MaxWaterSum - waterSumAdded,
+			self.PhaseRounding
+		)
+		local dTheta, dWater = nextTheta - theta, nextQv - qv
+		-- Validate every target, including currently inactive cells, before commit.
+		-- This catches unsupported thermal inputs without arbitrary temperature caps.
+		local pressure = buffer.readf32(fields.pressure, offset)
+		local exner = Thermodynamics.Exner(pressure)
+		Saturation.MixingRatio(thetaTarget * exner, pressure)
+		Saturation.MixingRatio(nextTheta * exner, pressure)
+		waterSumAdded += dWater
+		thetaSumAdded += dTheta
+		enthalpySumAdded += Constants.SpecificHeatDryAir * exner * dTheta + Constants.LatentHeatVaporization * dWater
+		buffer.writef32(fields.theta, offset, nextTheta)
+		buffer.writef32(fields.qv, offset, nextQv)
+	end
+	assert(Validation.IsFinite(enthalpySumAdded), "Source enthalpy input overflow")
+	assert(
+		Validation.IsFinite(self.ExternalWaterSum + waterSumAdded)
+			and Validation.IsFinite(self.ExternalThetaSum + thetaSumAdded)
+			and Validation.IsFinite(self.ExternalEnthalpySum + enthalpySumAdded),
+		"Cumulative source input overflow"
+	)
+	return waterSumAdded, thetaSumAdded, enthalpySumAdded
+end
+
+local function commitSourceInput(self: Simulation, water: number, theta: number, enthalpy: number)
+	self.ExternalWaterSum += water
+	self.ExternalThetaSum += theta
+	self.ExternalEnthalpySum += enthalpy
+	self.LastSourceInput.WaterSum = water
+	self.LastSourceInput.ThetaSum = theta
+	self.LastSourceInput.EnthalpySum = enthalpy
+end
+
+-- Explicit initial-state checkpoint; ongoing source events must never call this.
+function Simulation:ResetWaterBaseline()
+	assert(self.Time == 0, "Water baseline can only be set during initialization")
+	self.InitialWaterSum = waterSum(self.State)
+	self.ExternalWaterSum, self.ExternalThetaSum, self.ExternalEnthalpySum = 0, 0, 0
+	self.LastSourceInput.WaterSum, self.LastSourceInput.ThetaSum, self.LastSourceInput.EnthalpySum =
+		0, 0, 0
+end
+
+-- Atomic source operation for initial conditions/developer use. Existing cloud
+-- water, rain, momentum, profile, pressure and simulation time remain untouched.
+function Simulation:InjectSource(forcing: SourceForcing): SourceInput
+	Validation.CheckState(self.State)
+	local oldFields, pendingFields = self.State.Fields, self.PendingState.Fields
+	for _, name in SCALARS do
+		buffer.copy(pendingFields[name], 0, oldFields[name])
+	end
+	pendingFields.pressure = oldFields.pressure
+	local water, theta, enthalpy = applyForcing(self, self.PendingState, forcing)
+	oldFields.theta, pendingFields.theta = pendingFields.theta, oldFields.theta
+	oldFields.qv, pendingFields.qv = pendingFields.qv, oldFields.qv
+	commitSourceInput(self, water, theta, enthalpy)
+	return self.LastSourceInput
 end
 
 -- Interactive background-wind change, m/s (u=X, v=Z). Shift the MAC faces
@@ -220,8 +424,16 @@ end
 
 -- Run against owned staging storage. The protected call uses this static function
 -- rather than allocating a new closure per step.
-local function advancePending(self: Simulation, dt: number): (number, number)
+local function advancePending(
+	self: Simulation,
+	dt: number,
+	forcing: SourceForcing?
+): (number, number, number, number, number)
 	local state, faces = self.PendingState, self.PendingFaces
+	local water, thetaInput, enthalpy = 0, 0, 0
+	if forcing then
+		water, thetaInput, enthalpy = applyForcing(self, state, forcing)
+	end
 	local momentumCourant = self.Momentum:Predict(state, self.Profile, faces, dt)
 	self.Projection:Project(faces, dt)
 	local transportCourant = self.Transport:Advance(state, faces, dt)
@@ -240,7 +452,7 @@ local function advancePending(self: Simulation, dt: number): (number, number)
 	end
 	faces:WriteCellCenters(state)
 	Validation.CheckState(state)
-	return momentumCourant, transportCourant
+	return momentumCourant, transportCourant, water, thetaInput, enthalpy
 end
 
 -- First-order operator split: old-state momentum -> MAC projection -> bounded
@@ -248,7 +460,7 @@ end
 -- scalar transport alone; it does not make the whole coupled model second-order.
 -- Commit every evolving field together only after all stages validate. Failures
 -- preserve public buffers, time, diagnostics, and the pressure solver warm start.
-function Simulation:Step(dt: number)
+function Simulation:Step(dt: number, forcing: SourceForcing?)
 	assert(
 		Validation.IsFinite(dt) and dt > 0 and dt <= Simulation.FixedDt,
 		"Step dt must be positive and at most FixedDt"
@@ -268,7 +480,8 @@ function Simulation:Step(dt: number)
 	for name, value in self.Projection.Last do
 		(self.ProjectionDiagnosticsBackup :: any)[name] = value
 	end
-	local success, momentumCourant, transportCourant = pcall(advancePending, self, dt)
+	local success, momentumCourant, transportCourant, water, thetaInput, enthalpy =
+		pcall(advancePending, self, dt, forcing)
 	if not success then
 		buffer.copy(self.Projection.Correction, 0, self.ProjectionBackup)
 		for name, value in self.ProjectionDiagnosticsBackup do
@@ -284,6 +497,7 @@ function Simulation:Step(dt: number)
 	self.Faces.W, self.PendingFaces.W = self.PendingFaces.W, self.Faces.W
 	self.MomentumCourant = momentumCourant
 	self.TransportCourant = transportCourant
+	commitSourceInput(self, water, thetaInput, enthalpy)
 	self.Time += dt
 	self.StepMilliseconds = (os.clock() - startTime) * 1000
 end
@@ -360,8 +574,14 @@ function Simulation:GetDiagnostics(): Diagnostics
 		QrSum = qrSum,
 		WaterSum = total,
 		WaterDriftFraction = if self.InitialWaterSum > 0
+			then (total - self.InitialWaterSum - self.ExternalWaterSum) / self.InitialWaterSum
+			else 0,
+		RawWaterChangeFraction = if self.InitialWaterSum > 0
 			then (total - self.InitialWaterSum) / self.InitialWaterSum
 			else 0,
+		ExternalWaterSum = self.ExternalWaterSum,
+		ExternalThetaSum = self.ExternalThetaSum,
+		ExternalEnthalpySum = self.ExternalEnthalpySum,
 		MinU = minU,
 		MaxU = maxU,
 		MinV = minV,

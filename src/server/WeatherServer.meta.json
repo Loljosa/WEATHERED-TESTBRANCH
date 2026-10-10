@@ -12,6 +12,13 @@
     "CellSizeStuds": 12,
     "CloudBottomStuds": 424,
     "SimulationSpeed": 1,
-    "PerformancePreset": "Laptop"
+    "PerformancePreset": "Laptop",
+    "WorldSeed": 84219,
+    "CloudSourceCount": 0,
+    "SourceIntensity": 1,
+    "AutoClouds": true,
+    "WorldRegionOriginXMeters": -1200,
+    "WorldRegionOriginYMeters": 0,
+    "WorldRegionOriginZMeters": -1200
   }
 }

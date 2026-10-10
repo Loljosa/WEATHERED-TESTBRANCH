@@ -1,6 +1,13 @@
 # Moving clouds and formation controls
 
-The default Laptop preview remains Round, size 1, 6 K, RH 0.999 and 1x playback.
+> Phase 2.5 now starts with multiple world-seeded procedural sources. See
+> [the current generation guide](phase2.5-cloud-generation.md) for defaults,
+> source budgets and new commands. Primitive-bubble timings and benchmarks below
+> remain historical or legacy comparison results; the solver and legacy controls
+> are preserved.
+
+The retained Phase 2 primitive preview uses Round, size 1, 6 K, RH 0.999 and
+1x playback.
 Controls alter the atmospheric sounding, authoritative MAC wind or fixed-step
 playback. Cloud water continues to come from saturation adjustment with latent
 heating; no shape or formation preset paints qc.

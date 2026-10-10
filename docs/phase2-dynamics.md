@@ -1,5 +1,11 @@
 # Phase 2: three-dimensional atmospheric dynamics
 
+> Phase 2.5 now starts with multiple world-seeded procedural sources. See
+> [the current generation guide](phase2.5-cloud-generation.md) for defaults,
+> source budgets and new commands. Primitive-bubble timings and benchmarks below
+> remain historical or legacy comparison results; the solver and legacy controls
+> are preserved.
+
 Phase 2 combines staggered winds, a pressure projection and conservative scalar
 transport. This revision improves scalar accuracy, pressure-solver cost,
 float32 phase conversion and failed-step isolation. The current 0.2.4-alpha

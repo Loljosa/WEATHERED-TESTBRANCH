@@ -14,6 +14,9 @@ export type Settings = {
 	MaxCatchUpSteps: number,
 	FrameBudgetMilliseconds: number,
 	DebugRenderInterval: number,
+	InitialSourceCount: number,
+	MaxInitialSources: number,
+	SourceBuildSamplesPerStep: number,
 }
 
 local LAPTOP: Settings = table.freeze({
@@ -26,6 +29,9 @@ local LAPTOP: Settings = table.freeze({
 	MaxCatchUpSteps = 1,
 	FrameBudgetMilliseconds = 8,
 	DebugRenderInterval = 1, -- wall-clock seconds; physical timestep stays 0.25 s.
+	InitialSourceCount = 2,
+	MaxInitialSources = 4,
+	SourceBuildSamplesPerStep = 128,
 })
 
 local FULL: Settings = table.freeze({
@@ -38,6 +44,9 @@ local FULL: Settings = table.freeze({
 	MaxCatchUpSteps = 2,
 	FrameBudgetMilliseconds = 8,
 	DebugRenderInterval = 0.5,
+	InitialSourceCount = 3,
+	MaxInitialSources = 6,
+	SourceBuildSamplesPerStep = 192,
 })
 
 function PerformanceSettings.Resolve(preset: string): Settings

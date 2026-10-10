@@ -1,5 +1,11 @@
 # Laptop performance: 0.2.4-alpha
 
+> Phase 2.5 now starts with multiple world-seeded procedural sources. See
+> [the current generation guide](phase2.5-cloud-generation.md) for defaults,
+> source budgets and new commands. Primitive-bubble timings and benchmarks below
+> remain historical or legacy comparison results; the solver and legacy controls
+> are preserved.
+
 The server now defaults to a smaller **Laptop** preset and **1× simulation speed**.
 It retains dynamic condensation, three-dimensional winds, conservative bounded
 transport, pressure projection and the same fixed 0.25-second physical timestep.

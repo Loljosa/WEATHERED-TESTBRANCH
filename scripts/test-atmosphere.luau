@@ -359,6 +359,18 @@ testCloudControls(root, loadModule, check, near, rejects, quick)
 local testWeatherBootstrap = require("../tests/weather-bootstrap")
 testWeatherBootstrap(root, check, near, rejects)
 
+require("../tests/seeded-cloud-generation")(root, loadModule, check, near, rejects)
+require("../tests/seeded-source-manager")(root, loadModule, check, near, rejects)
+require("../tests/seeded-cloud-controls")(root, loadModule, check, near, rejects)
+require("../tests/multi-cloud-evolution")(
+	root,
+	loadModule,
+	check,
+	near,
+	rejects,
+	quick or previewOnly
+)
+
 -- The service shim is only a lookup adapter; the real production controller
 -- owns its accumulator, timestep and catch-up limit during this test.
 local replicatedStorage = { Shared = { Atmosphere = root } }

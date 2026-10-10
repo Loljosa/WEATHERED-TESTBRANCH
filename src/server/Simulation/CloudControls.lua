@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Atmosphere = require(ReplicatedStorage.Shared.Atmosphere)
 local Controller = require(script.Parent.SimulationController)
+local WorldSeed = require(ReplicatedStorage.Shared.Atmosphere.Generation.WorldSeed)
 
 local CloudControls = {}
 CloudControls.__index = CloudControls
@@ -12,6 +13,7 @@ export type CloudControls = typeof(setmetatable(
 		Config: Atmosphere.Config,
 		SetSpeed: (number) -> (),
 		SettingsChanged: (Atmosphere.Config) -> (),
+		Generation: Controller.GenerationOptions,
 	},
 	CloudControls
 ))
@@ -43,12 +45,21 @@ end
 function CloudControls.new(
 	config: Atmosphere.Config,
 	setSpeed: (number) -> (),
-	settingsChanged: (Atmosphere.Config) -> ()
+	settingsChanged: (Atmosphere.Config) -> (),
+	generation: Controller.GenerationOptions?
 ): CloudControls
-	return setmetatable(
-		{ Config = table.clone(config), SetSpeed = setSpeed, SettingsChanged = settingsChanged },
-		CloudControls
-	)
+	return setmetatable({
+		Config = table.clone(config),
+		SetSpeed = setSpeed,
+		SettingsChanged = settingsChanged,
+		Generation = table.clone(generation or {
+			Seed = 84219,
+			InitialSourceCount = 2,
+			MaxInitialSources = 4,
+			AutoClouds = true,
+			SeedSource = "DevelopmentFallback",
+		}),
+	}, CloudControls)
 end
 
 function CloudControls:Spawn(selectedShape: any?, formation: any?, scale: any?): string
@@ -94,10 +105,66 @@ function CloudControls:Execute(command: string, ...: any): any
 					or selected == "form"
 					or selected == "condensation"
 					or selected == "size"
+					or selected == "seed"
+					or selected == "cloudcount"
+					or selected == "autoclouds"
 				then 1
 				else 0
 	assert(args.n <= expected, "Too many weather command arguments")
-	if selected == "wind" then
+	if selected == "seed" then
+		local selectedSeed = WorldSeed.Validate(number(args[1], "World seed"))
+		self.Generation.Seed = selectedSeed
+		self.Generation.SeedSource = "DeveloperCommand"
+		return string.format(
+			"Next seeded initialization uses world seed %d. Use regenerate to apply it; the running atmosphere is unchanged.",
+			selectedSeed
+		)
+	elseif selected == "cloudcount" then
+		local count = number(args[1], "Cloud count")
+		local limit = self.Generation.MaxInitialSources or 4
+		assert(
+			count % 1 == 0 and count >= 1 and count <= limit,
+			string.format("Cloud count must be an integer from 1 to %d for this preset", limit)
+		)
+		self.Generation.InitialSourceCount = count
+		return string.format(
+			"Next seeded initialization has %d source regions. Use regenerate to apply it; existing clouds are unchanged.",
+			count
+		)
+	elseif selected == "regenerate" then
+		Controller.Regenerate(self.Config, self.Generation)
+		return string.format(
+			"Regenerated a clear seeded atmosphere: seed %d, %d warm/moist regions. Cloud water will form through microphysics.",
+			self.Generation.Seed,
+			self.Generation.InitialSourceCount or 2
+		)
+	elseif selected == "spawnseeded" then
+		local id = Controller.SpawnSeeded()
+		return "Queued deterministic source "
+			.. id
+			.. "; existing fields and simulation time are preserved. Source geometry is built over bounded fixed steps."
+	elseif selected == "autoclouds" then
+		assert(type(args[1]) == "string", "Use autoclouds on or autoclouds off")
+		local setting = string.lower(args[1])
+		assert(setting == "on" or setting == "off", "Use autoclouds on or autoclouds off")
+		local enabled = setting == "on"
+		Controller.SetAutoClouds(enabled)
+		self.Generation.AutoClouds = enabled
+		return if enabled
+			then "Scheduled source formation enabled."
+			else "New scheduled sources disabled; already queued sources and existing atmospheric clouds continue evolving."
+	elseif selected == "seedstatus" then
+		local status = Controller.GetSeedStatus()
+		status.NextWorldSeed = self.Generation.Seed
+		status.NextSeedSource = self.Generation.SeedSource or "Configured"
+		status.NextInitialSourceCount = self.Generation.InitialSourceCount or 2
+		status.MaximumInitialSourceCount = self.Generation.MaxInitialSources or 4
+		status.NextSourceIntensity = self.Generation.SourceIntensity or 1
+		status.NextAutoClouds = if self.Generation.AutoClouds == nil
+			then true
+			else self.Generation.AutoClouds
+		return status
+	elseif selected == "wind" then
 		local u, v = number(args[1], "Wind U"), number(args[2], "Wind V")
 		Controller.SetWind(u, v)
 		self.Config.BackgroundU, self.Config.BackgroundV = u, v
@@ -138,7 +205,7 @@ function CloudControls:Execute(command: string, ...: any): any
 	elseif selected == "status" then
 		return Controller.GetDiagnostics()
 	elseif selected == "help" then
-		return "wind U V (-30..30 m/s X/Z); speed 0.25..4; spawn [Round|Wide|Tower] [Normal|Fast] [size 0.5..1.5] (resets); size 0.5..1.5 (resets); condensation Normal|Fast (resets); form [0.25..240 seconds, default 60]; pause; resume; reset; status"
+		return "seed signed-32-bit integer (next initialization); cloudcount 1..preset limit (next initialization); regenerate (seeded reset); spawnseeded (adds source without reset); autoclouds on|off; seedstatus; wind U V (-30..30 m/s X/Z); speed 0.25..4; spawn [Round|Wide|Tower] [Normal|Fast] [size 0.5..1.5] (legacy reset); size 0.5..1.5 (legacy reset); condensation Normal|Fast (legacy reset); form [0.25..240 seconds, default 60]; pause; resume; reset (legacy); status"
 	end
 	error("Unknown weather command; use help")
 end
