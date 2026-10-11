@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/ROBLOX-393B3D?style=flat-square&logo=roblox&logoColor=white" alt="Roblox">
   <img src="https://img.shields.io/badge/LUAU-00A6A6?style=flat-square" alt="Luau">
-  <img src="https://img.shields.io/badge/PHASE_2.5-SEEDED_CLOUDS-d6a652?style=flat-square" alt="Phase 2.5: seeded clouds">
+  <img src="https://img.shields.io/badge/PHASE_2.6-WORLD_TRANSPORT-d6a652?style=flat-square" alt="Phase 2.6: world-scale atmospheric transport">
   <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/commits/main"><img src="https://img.shields.io/github/last-commit/Loljosa/WEATHERED-TESTBRANCH?style=flat-square&color=628b57" alt="Latest repository commit"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-628b57?style=flat-square" alt="MIT license"></a>
 </p>
@@ -32,23 +32,28 @@ you survive in. Wind, visibility, vegetation and future storms will share one
 server-authoritative atmospheric field.
 
 This repository develops the weather engine independently of the larger game.
-The current **CM1-inspired warm-cloud prototype** runs natively in Luau. Clouds
-begin as clear, world-seeded warm/moist regions; their water forms through
-saturation and condensation. Multiple procedural sources can develop together,
-and bounded new events join the running atmosphere without resetting it. The
-visible voxels are a diagnostic view of that simulation.
+The **CM1-inspired warm-cloud prototype** runs natively in Luau. Phase 2.6 extends
+cloud formation and transport across **4028 × 4028 studs**, organized into sixteen
+logical regions. One shared world field carries vapor, liquid water and temperature
+across region boundaries. Seeded warm/moist sources form liquid through saturation
+and condensation; new sources join without resetting existing weather.
+
+The coarse world uses a prescribed divergence-free circulation. The existing
+buoyancy-driven MAC solver remains available as optional local detail. Its
+one-way diagnostic coupling is off by default. Visible cubes show the evolving
+liquid field; they are development diagnostics.
 
 <table>
 <tr>
 <td width="33%" valign="top">
 <img src="assets/icons/lucide/cloud.svg" width="32" height="32" alt="">
 <h3>Dynamic clouds</h3>
-Warm/moist air rises, moves, condenses and evaporates. Cloud water starts at zero.
+Seeded warm/moist air condenses and evaporates. Cloud water starts at zero.
 </td>
 <td width="33%" valign="top">
 <img src="assets/icons/lucide/wind.svg" width="32" height="32" alt="">
 <h3>A moving atmosphere</h3>
-3D transport and live wind controls move the field. The source deforms as it evolves.
+Shared finite-volume transport carries clouds across the world and its sixteen regions.
 </td>
 <td width="33%" valign="top">
 <img src="assets/icons/lucide/cpu.svg" width="32" height="32" alt="">
@@ -59,10 +64,10 @@ Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </table>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ENGINE-0.2.5--alpha-d6a652?style=for-the-badge" alt="Engine 0.2.5-alpha">
+  <img src="https://img.shields.io/badge/ENGINE-0.2.6--alpha-d6a652?style=for-the-badge" alt="Engine 0.2.6-alpha">
   <img src="https://img.shields.io/badge/FIXED_STEP-0.25_s-00a6a6?style=for-the-badge" alt="Fixed timestep: 0.25 seconds">
-  <img src="https://img.shields.io/badge/LAPTOP_CELLS-3%2C072-628b57?style=for-the-badge" alt="Laptop preset: 3,072 simulation cells">
-  <img src="https://img.shields.io/badge/DEBUG_VOXEL-12_studs-628b57?style=for-the-badge" alt="Debug voxel width: 12 studs">
+  <img src="https://img.shields.io/badge/WORLD_CELLS-6%2C144-628b57?style=for-the-badge" alt="Laptop world field: 6,144 cells">
+  <img src="https://img.shields.io/badge/WORLD-4028_%C3%97_4028_studs-628b57?style=for-the-badge" alt="Atmospheric coverage: 4028 by 4028 studs">
 </p>
 
 ### From clear air to a cloud
@@ -76,7 +81,7 @@ Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </tr>
 <tr>
 <td><img src="assets/icons/lucide/arrow-up.svg" width="24" height="24" alt=""> <strong>2 · Rise + move</strong></td>
-<td>Buoyancy and 3D transport develop the source; background wind carries it.</td>
+<td>Coarse circulation and 3D transport lift and carry air; optional local detail resolves buoyancy.</td>
 </tr>
 <tr>
 <td><img src="assets/icons/lucide/droplets.svg" width="24" height="24" alt=""> <strong>3 · Reach saturation</strong></td>
@@ -95,10 +100,10 @@ collision objects.
 
 | Where the project stands | Current scope |
 | --- | --- |
-| **Implemented** | Seeded multi-axis sources, bounded scheduled formation, natural condensation, 3D transport and pressure projection |
-| **Available in Studio** | Seed/regeneration, nonresetting source injection, automatic events, live wind, playback and legacy shape controls |
+| **Implemented** | World-scale conservative transport, seeded sources, bounded events, natural condensation and optional local MAC detail |
+| **Available in Studio** | Coverage scenarios, regional/motion diagnostics, seed/regeneration, source injection, live wind and playback |
 | **Verified by CLI** | Production-module Lune tests and Rojo builds |
-| **Next** | Studio profiling and balanced surface/precipitation water and energy budgets |
+| **Next** | Studio multiplayer/performance validation, improved world transport and balanced atmospheric exchange |
 
 ## Launch the atmosphere
 
@@ -125,17 +130,43 @@ mkdir -p build
 rojo build default.project.json -o build/WEATHERED.rbxlx
 ```
 
-Open the built place in Studio and choose **Run** to keep the editor camera.
-This isolated test place has no terrain, floor or spawn. For an existing game
-place, use **Play** and switch to the **server** view for controls.
+Open the built place in Studio and choose **Play (F5)**. World diagnostic cubes
+run on the client, so server-only **Run** advances the atmosphere without showing
+this renderer. This isolated place has no terrain, floor or spawn; use Studio's
+camera to inspect the cloud layer.
 
-1. Open **Output**. The Laptop preview starts clear; diagnostics print every ten
-   wall seconds.
-2. Look near **(0, 470, 0)**. Multiple seeded regions begin clear and develop
-   liquid through the solver. Onset depends on seed and source geometry; compare
-   simulated time in Output, not wall time alone.
-3. Expand `Workspace.WEATHERED_DEBUG_VOXELS`, select a visible Part and press
-   **F** to focus it.
+1. Open **Output**. Keep `PerformancePreset=Laptop` and
+   `WorldWeatherEnabled=true`. The server owns one 32×6×32 field and prints
+   diagnostics every ten wall seconds.
+2. Clouds cover X/Z **−2014…+2014** at **Y424–568**. Expand the client's
+   `Workspace.WEATHERED_WORLD_DEBUG_VOXELS`, select a visible Part and press **F**
+   to focus it. Sources are distributed across the map rather than centered at zero.
+3. Switch to the **server** view for controls. Try `wind 8 2`, `debugregions on`
+   and `debugvectors on`. Let at least two simulated minutes advance and compare
+   `cloudmotion` and `weatherregions`; dropped time can make wall time longer.
+
+The tested seed-84219 Scattered scenario with 8/2 m/s wind first displayed liquid
+at **18 simulated seconds**. Other winds, seeds and coverage settings can differ.
+Client snapshots show a bounded subset of liquid cells, so they are a diagnostic
+view of the field rather than complete cloud graphics.
+
+<details>
+<summary><strong>Keep the camera above the clouds in the isolated Play test</strong></summary>
+
+This place has no floor, so its character/camera can fall. In Studio's **client**
+Command Bar, place the camera above the cloud layer:
+
+```lua
+local camera = workspace.CurrentCamera
+camera.CameraType = Enum.CameraType.Scriptable
+camera.CFrame = CFrame.lookAt(Vector3.new(0, 1400, 1800), Vector3.new(0, 480, 0))
+```
+
+This changes only the viewing camera. To restore the normal camera, run
+`workspace.CurrentCamera.CameraType = Enum.CameraType.Custom` in that same client
+Command Bar. Use the **server** view for weather commands.
+
+</details>
 
 <details>
 <summary><strong>Prefer live sync?</strong></summary>
@@ -160,131 +191,154 @@ Output show the response.
 
 | Try this | Result |
 | --- | --- |
-| `seed 84219` → `regenerate` | Select a deterministic seed, then explicitly rebuild the initial atmosphere |
-| `spawnseeded` | Queue another warm/moist source while existing clouds and time continue |
-| `cloudcount 4` | Select initial source count, within preset limits; apply with regenerate |
-| `autoclouds on` / `autoclouds off` | Enable/disable new scheduled events; existing liquid remains |
-| `seedstatus` / `status` | Inspect source settings, queue/budgets, numerical diagnostics and motion |
-| `wind 8 2` / `wind -8 -2` | Move or reverse the field with physical X/Z background wind |
-| `speed 0.5` / `speed 1` | Reduce requested physics work or return to normal playback |
-| `pause` / `resume` | Inspect a paused atmosphere or continue evolving |
-| `spawn Wide Fast` / `size 1.25` | Legacy primitive-source experiment; explicitly replaces the atmosphere |
-| `form 60` / `reset` / `help` | Preview real evolution, explicitly restart, or list commands |
+| `worldsize 4028` / `weatherregions` | Validate the full domain and inspect all sixteen regions |
+| `cloudmotion` / `status` | Inspect field displacement, velocities, source inputs and dropped time |
+| `seed 84219` → `regenerate` | Select a deterministic seed, then intentionally rebuild the world |
+| `cloudcoverage few` → `regenerate` | Select Clear/Few/Scattered/Broken/Overcast initial conditions |
+| `cloudcount 4` → `regenerate` | Choose 0–16 initial sources for the next initialization |
+| `spawnseeded` | Queue another atmospheric source while existing clouds and time continue |
+| `autoclouds on` / `autoclouds off` | Toggle new scheduled events without deleting current liquid |
+| `seedstatus` | Inspect active/next seed settings, queue and remaining source budgets |
+| `wind 8 2` / `wind -8 -2` | Change physical X/Z background wind in m/s |
+| `debugregions on` / `debugvectors on` | Show optional regional boundaries and wind direction |
+| `speed 0.5` / `speed 1` | Reduce requested work or return to normal playback |
+| `pause` / `resume` | Preserve the timeline while paused, then continue |
+| `form 60` / `reset` / `help` | Queue bounded evolution, intentionally regenerate, or list commands |
+| `detail on` / `detail off` | Enable/disable one expensive local MAC diagnostic; default is off |
+| `spawn Wide Fast` / `size 1.25` / `condensation Fast` | Start an isolated historical local experiment; global weather stays intact |
 
-**`spawnseeded` retains the running atmosphere.** `regenerate` intentionally
-rebuilds seeded sources; `reset` and legacy spawn/size/condensation controls replace
-it with the primitive experiment. Source shape describes warm/moist forcing,
-while actual `qc` determines the visible cloud. Initial cloud water remains zero.
+**`spawnseeded` retains the running world.** Its cache builds in bounded slices,
+then supplies warm/moist forcing; it does not instantly create visible `qc`.
+`regenerate` and `reset` intentionally restart the world. Coverage, seed and
+initial source count apply only after that explicit reset. Source shape describes
+atmospheric forcing; microphysics determines the resulting liquid water.
 
-A procedural preview: **`seed 84219` → `regenerate` → `wind 8 2` → `spawnseeded`**.
-Motion appears as changing occupancy of the fixed voxel grid. Faster playback
-requests more CPU work and cannot guarantee faster wall-clock results. Use
-`speed 0.5` on struggling hardware. See
-[Phase 2.5 cloud generation](docs/phase2.5-cloud-generation.md) for seed integration,
-source budgets, all new commands and the exact Studio test. The
-[legacy cloud controls guide](docs/cloud-controls.md) retains primitive controls.
+A moving-world preview: **`seed 84219` → `regenerate` → `wind 8 2` →
+`debugregions on` → `spawnseeded`**. Faster playback requests more CPU work and
+cannot guarantee faster wall-clock results. Use `speed 0.5` on struggling hardware
+and leave local detail off. The [Phase 2.6 guide](docs/phase2.6-world-clouds.md)
+explains every command and the exact multiplayer Studio test. With
+`WorldWeatherEnabled=false`, the retained Phase 2.5 bootstrap and local pooled
+renderer are available for comparison.
 
 ## Inside the model
 
-The physics uses packed float32 fields and reusable scratch buffers. Debug Parts
-update at a lower frequency than physics; the simulation always uses a fixed
-**0.25-second timestep**.
+The world uses packed float64 fields and reusable transport/source buffers.
+The retained local MAC solver uses float32. Both keep a fixed physical
+**0.25-second timestep**; rendering and snapshots update less often.
 
 <details>
-<summary><img src="assets/icons/lucide/timer.svg" width="18" height="18" alt=""> <strong>Performance presets, display height and physical units</strong></summary>
+<summary><img src="assets/icons/lucide/timer.svg" width="18" height="18" alt=""> <strong>Presets, world coverage and physical units</strong></summary>
 
 | Setting | Laptop · default | Full · optional |
 | --- | ---: | ---: |
-| Grid, X × Y × Z | 16 × 12 × 16 | 24 × 12 × 24 |
-| Cells | 3,072 | 6,912 |
-| Physical spacing, X/Y/Z | 150/100/150 m | 100/100/100 m |
-| Physical domain, X/Y/Z | 2,400/1,200/2,400 m | 2,400/1,200/2,400 m |
-| Debug refresh | 1 Hz | 2 Hz |
-| Maximum steps per Heartbeat | 1 | 2 |
-| Initial / maximum initial sources | 2 / 4 | 3 / 6 |
+| World coarse grid, X × Y × Z | 32 × 6 × 32 | 48 × 6 × 48 |
+| World cells | 6,144 | 13,824 |
+| Physical spacing, X/Y/Z | 62.9375/12/62.9375 m | 41.9583…/12/41.9583… m |
+| World coverage, X/Z | 4028/4028 studs | 4028/4028 studs |
+| Logical regions | 4 × 4, each 1007 × 1007 studs | Same |
+| Initial Scattered sources / maximum | 6 / 16 | 8 / 16 |
 | Source build samples per step | 128 | 192 |
+| Snapshot rate / liquid Part cap | 1 Hz / 256 | 2 Hz / 512 |
+| Maximum steps per Heartbeat | 1 | 2 |
+| Optional local MAC grid | 16 × 12 × 16 | 24 × 12 × 24 |
 
-Keep the Laptop preset for slower hardware. Change `PerformancePreset` while
-stopped, then restart. Both presets have a soft **8 ms catch-up budget**: an
-individual step can exceed it, and excess backlog is reported as dropped
-simulation time. Native-host benchmarks do not establish Studio FPS.
+Keep Laptop for slower hardware. Change `PerformancePreset` while stopped, then
+restart. The catch-up budget is a soft **8 ms**; an individual step may exceed it.
+Excess backlog becomes reported dropped simulation time rather than an unlimited
+catch-up loop. Optional local detail has a separate soft budget and remains off.
 
-Display cells are **12 × 12 × 12 studs**, spanning **Y424–568**. With terrain near
-Y70, that is 354–498 studs above the terrain. `CloudBottomStuds` changes display
-height without changing physical temperature, pressure or cell spacing.
+A single conversion, **2 studs per physical meter**, applies to X/Y/Z. The world
+is 2014 physical meters wide/deep. Physical altitude 1000–1072 m maps to
+**Y424–568 studs**, or 354–498 studs above terrain at Y70. World cubes represent
+coarse volumes: roughly **126/84 studs wide** for Laptop/Full, and 24 studs tall.
+The old 12-stud cubes belong to the retained local-only mode.
 
-Wind axes are **u=X, v=Z, w=Y**, in physical m/s. Roblox studs and atmospheric
-meters are separate scales. Studio starts with multiple seeded sources and
-2/1 m/s wind. `Workspace.WorldSeed` supplies the canonical integer terrain seed
-when available; this isolated repository uses fallback 84219. Source geometry
-combines XZ/XY/YZ maps and coherent 3D noise. The direct core factory retains its
-zero-wind, 2 K and RH 0.98 legacy scientific defaults.
+Wind axes are **u=X, v=Z, w=Y**, in m/s. At 8 m/s, air travels 16 studs per
+simulated second. Internal regions have no walls or independent wrapping; default
+periodicity is across the full world. `Workspace.WorldSeed` supplies the canonical
+integer terrain seed when available, with fallback 84219. XZ/XY/YZ maps and
+coherent 3D noise shape subsaturated warm/moist targets. Default Scattered humidity
+is 99.5% in the shallow elevated cloud layer, rather than at the surface.
 
 </details>
 
 <details>
 <summary><strong>Numerical architecture and current limits</strong></summary>
 
-| Component | Implementation |
-| --- | --- |
-| State | Eight float32 buffers: `u`, `v`, `w`, `theta`, `qv`, `qc`, `qr`, `pressure` |
-| Thermodynamics | Potential temperature, hydrostatic absolute pressure and liquid-water saturation |
-| Microphysics | Coupled condensation/evaporation, latent heat and float32 water accounting |
-| Momentum | Staggered MAC winds, buoyancy, drag and viscosity |
-| Projection | Boussinesq pressure correction with residual and divergence checks |
-| Transport | Bounded conservative finite-volume flux correction |
-| Boundaries | Periodic X/Z; sealed top and bottom |
-| Generation | Signed integer world seed, three-axis heightmaps and coherent multi-octave noise |
-| Sources | Cached theta/total-water targets, fixed-tick scheduling and explicit external budgets |
+| Component | Authoritative world | Optional local detail |
+| --- | --- | --- |
+| Storage | Packed float64 SoA | Existing float32 SoA/MAC faces |
+| Flow | Prescribed discrete divergence-free circulation, background wind and shear | Buoyancy, drag, diffusion and pressure projection |
+| Scalars | First-order conservative upwind flux divergence with CFL substeps | Existing bounded conservative flux correction |
+| Thermodynamics | Hydrostatic absolute pressure, potential temperature and production warm-cloud adjustment | Existing sounding, microphysics and latent heating |
+| Boundaries | Full-world periodic X/Z by default; sealed Y; validated sealed lateral option | Periodic lateral shadow, conditioned boundary ring |
+| Sources | World-seeded multi-axis geometry, fixed-tick events and explicit heat/water budgets | One-way environmental sampling; no global liquid feedback |
+| Display | Low-rate shared snapshots and capped client pools | Retained local diagnostic experiment |
 
-The model assumes constant density. Water diagnostics are unweighted mixing-ratio
-sums, not density-weighted physical mass. Projection correction is separate from
-absolute thermodynamic pressure. The coupled timestep remains first order.
-External moisture/heat are recorded separately from numerical drift. Finite
-sealed-box source budgets prevent unlimited accumulation. Precipitation fallout,
-terrain feedback and a balanced surface budget are future work. Source equations,
-measurements and remaining limits live in
-[Phase 2.5 cloud generation](docs/phase2.5-cloud-generation.md); the unchanged
-solver is documented in [Phase 2 dynamics](docs/phase2-dynamics.md).
+Water accounting assumes constant reference density. Reports are **unweighted
+mixing-ratio sums**, not kilograms. External inputs and internal/outer-seam fluxes
+are separate from numerical error. Sources never paint cloud water. First-order
+world transport diffuses small features, and the shallow cloud layer does not
+represent deep convection. The coarse circulation does not solve momentum or
+pressure projection; the optional local solver does. Its slower diagnostic clock
+and boundary relaxation are not synchronized two-way nesting.
+
+Snapshot interpolation only smooths diagnostic field changes. Numerical fluxes
+and displacement tests establish transport. Sparse caps can omit liquid cells
+from the view without removing their atmospheric water. Precipitation fallout,
+open boundaries, terrain feedback and balanced long-term water/energy exchange
+remain future work. Equations and approximations are in the
+[Phase 2.6 guide](docs/phase2.6-world-clouds.md).
 
 </details>
 
 ## Validate a change
 
 ```bash
-npx stylua src scripts tests
+npx stylua src
 npx stylua --check src scripts tests
-lune run scripts/test-atmosphere.luau --quick
+lune run scripts/test-world-weather.luau
+lune run scripts/test-atmosphere.luau
 rojo build default.project.json -o build/WEATHERED.rbxlx
 git diff --check
 ```
 
-The quick suite runs production modules for mathematics, transport, projection,
-controls, bootstrap wiring and a compact seeded-evolution smoke scenario.
-`--preview-only` retains the two legacy 240-second previews plus short seeded
-checks. Omit flags for the full legacy matrix, a 240-second seeded Laptop run
-and a 40-second seeded Full smoke run. Run native benchmarks separately from
-expensive tests, using the commands in the Phase 2.5 guide.
+The full Phase 2.6 suite passed **177,714 production-module checks**, including
+world geometry, deterministic sources, cross-region conservation, real liquid
+formation, motion, coupling isolation, snapshot consistency, server bootstrap
+and controls. `--quick` shortens long integration scenarios. The existing Phase 2
+and 2.5 full suite also passed **8,240,846 checks**, loading the retained local
+production modules in their historical scenarios.
+Reports include source/test fingerprints so results can be tied to tested code.
 
-Phase 2.5 adds seed, geometry, scheduler, source-budget and multicell evolution
-checks using production modules. Final seeded validation passed **55,217 checks**,
-including a 240-second Laptop run; the main quick suite passed **110,822**.
-Current measured results are recorded in the
-[Phase 2.5 guide](docs/phase2.5-cloud-generation.md#validation-records). Native
-measurements exclude rendering and the larger game; graphics and gameplay cost
-still need its manual Studio test.
+In the 240-second Laptop world test, liquid first appeared at 18 seconds, 986 cells
+contained above-threshold liquid at the end, and the maximum source-corrected
+water drift was **2.07×10⁻¹⁴** as a fraction. A manufactured 8/2 m/s transport test
+measured **1873.27/467.90 meters** of X/Z travel over 240 seconds. Natural cloud
+centroids also moved, but formation and evaporation affect those centroids.
 
-The paired 60-second native benchmark measured seeded steps at **37.28 ms** mean
-for Laptop and **91.97 ms** for Full, including source work. The corresponding
-frozen Phase 2 means were 35.36 and 89.61 ms. Source work has bounded sample
-counts, but observed timing spikes can exceed the soft frame budget. These host
-measurements do not establish Studio FPS or laptop suitability.
+A quiet 60-second native-host comparison measured world steps at **15.705 ms
+mean / 22.373 ms p95** for Laptop and **38.854 / 53.773 ms** for Full. The frozen
+Phase 2.5 local architecture measured 30.245/72.179 ms means. These are different
+physical domains and solver responsibilities, not an isolated solver speedup.
+World/source packed storage is **1.606 / 3.607 MB**, excluding rendering overhead.
+
+Both world means exceed the soft 8 ms catch-up budget, and observed steps can
+hitch. Initial source setup is synchronous; optional local MAC detail also exceeded
+its soft budget in every measured step and remains off. **Studio FPS and
+multiplayer presentation still require manual testing.** Rojo build, formatting
+and whitespace checks passed. See the
+[validation records](docs/phase2.6-world-clouds.md#validation-records) and
+[performance measurements](docs/phase2.6-world-clouds.md#performance-measurements)
+for complete results and remaining Studio checks.
 
 ## Field notes
 
 | Guide | What you will find |
 | --- | --- |
-| [Phase 2.5 cloud generation](docs/phase2.5-cloud-generation.md) | World seeds, procedural geometry, bounded events, commands, measurements and Studio test |
+| [Phase 2.6 world clouds](docs/phase2.6-world-clouds.md) | Full-world geometry, transport, coupling, replication, diagnostics and exact Studio procedure |
+| [Phase 2.5 cloud generation](docs/phase2.5-cloud-generation.md) | Retained local seeded geometry, bounded events and historical measurements |
 | [Cloud controls](docs/cloud-controls.md) | Legacy primitive shapes, live wind and earlier moving-cloud measurements |
 | [Laptop performance](docs/laptop-performance.md) | Presets, work limits, profiling and Studio settings |
 | [Phase 2 dynamics](docs/phase2-dynamics.md) | Equations, boundaries, units, conservation and solver diagnostics |
@@ -304,14 +358,16 @@ src/
 │   ├── Microphysics/     Warm-cloud phase conversion
 │   ├── Dynamics/         Momentum, projection and 3D transport
 │   ├── Generation/       World seeds, heightmaps, noise and source descriptions
+│   ├── World/            Coordinates, coarse field, sources, snapshots and client debug
 │   ├── Utilities/        State validation
 │   ├── Simulation.lua    Simulation ownership and stepping
 │   └── init.lua          Public atmosphere entry point
 ├── server/
-│   ├── Simulation/       Fixed-step controller, source scheduler/manager and controls
+│   ├── Simulation/       World/local controllers, coupling, replication and controls
 │   ├── Debug/            Pooled voxel visualization
 │   └── WeatherServer.server.lua
 └── client/
+    ├── WorldWeatherClient.lua
     └── WeatherClient.client.lua
 
 docs/                     Physics notes and Studio instructions
@@ -329,6 +385,8 @@ tests/                    Production-module tests and Roblox lookup adapters
 - [x] Add moving-cloud controls and a smaller Laptop preview.
 - [ ] Profile in Studio and improve transport/solver cost.
 - [x] Add world-seeded multi-source geometry and bounded ongoing formation.
+- [x] Transport naturally condensed cloud water across a 4028 × 4028-stud world.
+- [ ] Improve world transport accuracy and conservative local nesting.
 - [ ] Balance surface/precipitation water and energy exchange.
 - [ ] Expose sampling services for existing survival gameplay systems.
 - [ ] Add precipitation, terrain interaction and storm lifecycle.

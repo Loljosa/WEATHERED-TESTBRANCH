@@ -19,6 +19,15 @@
     "AutoClouds": true,
     "WorldRegionOriginXMeters": -1200,
     "WorldRegionOriginYMeters": 0,
-    "WorldRegionOriginZMeters": -1200
+    "WorldRegionOriginZMeters": -1200,
+    "WorldWeatherEnabled": true,
+    "WorldSizeStuds": 4028,
+    "WorldCenterXStuds": 0,
+    "WorldCenterZStuds": 0,
+    "StudsPerMeter": 2,
+    "BaseAltitudeMeters": 1000,
+    "WorldHeightMeters": 72,
+    "CloudCoverage": "Scattered",
+    "WorldBoundary": "Periodic"
   }
 }

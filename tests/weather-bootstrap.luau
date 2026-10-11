@@ -48,6 +48,9 @@ return function(atmosphereRoot: any, check: any, near: any, rejects: any)
 	})
 	local attributes =
 		serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
+	-- This retained fixture exercises the standalone MAC bootstrap. The world
+	-- bootstrap has its own production-module integration fixture.
+	attributes.WorldWeatherEnabled = false
 	local attributeSignals = {}
 	local fakeScript = { Parent = serverRoot }
 	function fakeScript:GetAttribute(name: string): any

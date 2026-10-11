@@ -1,5 +1,12 @@
 --!strict
 
+-- Explicit mode switch preserves the previous standalone MAC prototype and its
+-- test/bootstrap API. Production metadata selects the world-scale controller.
+if script:GetAttribute("WorldWeatherEnabled") == true then
+	require(script.Parent.Simulation.WorldWeatherBootstrap).Start(script)
+	return
+end
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 

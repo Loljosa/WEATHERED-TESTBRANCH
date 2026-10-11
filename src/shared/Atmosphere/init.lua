@@ -11,7 +11,7 @@ export type SourceInput = Simulation.SourceInput
 
 local Atmosphere = {}
 
-Atmosphere.Version = "0.2.5-alpha"
+Atmosphere.Version = "0.2.6-alpha"
 Atmosphere.FixedDt = Simulation.FixedDt
 Atmosphere.CellHeightMeters = Simulation.CellHeightMeters
 

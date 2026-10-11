@@ -266,6 +266,7 @@ return function(root: any, _loadModule: any, check: any, near: any, rejects: any
 	): any
 		local attributes =
 			serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
+		attributes.WorldWeatherEnabled = false -- retained Phase 2.5 local bootstrap
 		attributes.CloudSourceCount = 1
 		if developmentSeed ~= nil then
 			attributes.WorldSeed = developmentSeed
