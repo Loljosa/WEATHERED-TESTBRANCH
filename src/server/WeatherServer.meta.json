@@ -28,6 +28,7 @@
     "BaseAltitudeMeters": 1000,
     "WorldHeightMeters": 72,
     "CloudCoverage": "Scattered",
-    "WorldBoundary": "Periodic"
+    "WorldBoundary": "Periodic",
+    "CloudRenderSnapshotHz": 1
   }
 }

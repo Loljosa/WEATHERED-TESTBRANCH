@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/ROBLOX-393B3D?style=flat-square&logo=roblox&logoColor=white" alt="Roblox">
   <img src="https://img.shields.io/badge/LUAU-00A6A6?style=flat-square" alt="Luau">
-  <img src="https://img.shields.io/badge/PHASE_2.6-WORLD_TRANSPORT-d6a652?style=flat-square" alt="Phase 2.6: world-scale atmospheric transport">
+  <img src="https://img.shields.io/badge/PHASE_2.65-CUBIC_CLOUDS-d6a652?style=flat-square" alt="Phase 2.65: density-driven cubic clouds">
   <a href="https://github.com/Loljosa/WEATHERED-TESTBRANCH/commits/main"><img src="https://img.shields.io/github/last-commit/Loljosa/WEATHERED-TESTBRANCH?style=flat-square&color=628b57" alt="Latest repository commit"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-628b57?style=flat-square" alt="MIT license"></a>
 </p>
@@ -40,8 +40,10 @@ and condensation; new sources join without resetting existing weather.
 
 The coarse world uses a prescribed divergence-free circulation. The existing
 buoyancy-driven MAC solver remains available as optional local detail. Its
-one-way diagnostic coupling is off by default. Visible cubes show the evolving
-liquid field; they are development diagnostics.
+one-way diagnostic coupling is off by default. Phase 2.65 reconstructs the liquid field into bounded, client-owned small cubes.
+Complete quantized snapshots preserve neighboring cells; deterministic detail
+never changes the atmosphere. Each normal cloud element is a real `PartType.Block` with equal X/Y/Z size.
+Giant atmospheric cell Parts remain an explicit voxel debug mode. **Roblox Studio visual and device acceptance is still pending.**
 
 <table>
 <tr>
@@ -64,7 +66,7 @@ Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </table>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ENGINE-0.2.6--alpha-d6a652?style=for-the-badge" alt="Engine 0.2.6-alpha">
+  <img src="https://img.shields.io/badge/ENGINE-0.2.65--alpha-d6a652?style=for-the-badge" alt="Engine 0.2.65-alpha">
   <img src="https://img.shields.io/badge/FIXED_STEP-0.25_s-00a6a6?style=for-the-badge" alt="Fixed timestep: 0.25 seconds">
   <img src="https://img.shields.io/badge/WORLD_CELLS-6%2C144-628b57?style=for-the-badge" alt="Laptop world field: 6,144 cells">
   <img src="https://img.shields.io/badge/WORLD-4028_%C3%97_4028_studs-628b57?style=for-the-badge" alt="Atmospheric coverage: 4028 by 4028 studs">
@@ -89,7 +91,7 @@ Packed buffers, reusable storage and a Laptop preset keep the prototype focused.
 </tr>
 <tr>
 <td><img src="assets/icons/lucide/cloud.svg" width="24" height="24" alt=""> <strong>4 · Show the field</strong></td>
-<td>Debug voxels display cells containing qc as the cloud shape evolves.</td>
+<td>Small 3D cubes express reconstructed qc; optional voxels expose the numerical grid.</td>
 </tr>
 </tbody>
 </table>
@@ -103,7 +105,7 @@ collision objects.
 | **Implemented** | World-scale conservative transport, seeded sources, bounded events, natural condensation and optional local MAC detail |
 | **Available in Studio** | Coverage scenarios, regional/motion diagnostics, seed/regeneration, source injection, live wind and playback |
 | **Verified by CLI** | Production-module Lune tests and Rojo builds |
-| **Next** | Studio multiplayer/performance validation, improved world transport and balanced atmospheric exchange |
+| **Next** | Studio visual/device validation, deeper atmospheric dynamics and improved optical shading |
 
 ## Launch the atmosphere
 
@@ -130,7 +132,7 @@ mkdir -p build
 rojo build default.project.json -o build/WEATHERED.rbxlx
 ```
 
-Open the built place in Studio and choose **Play (F5)**. World diagnostic cubes
+Open the built place in Studio and choose **Play (F5)**. Cubic clouds
 run on the client, so server-only **Run** advances the atmosphere without showing
 this renderer. This isolated place has no terrain, floor or spawn; use Studio's
 camera to inspect the cloud layer.
@@ -138,17 +140,18 @@ camera to inspect the cloud layer.
 1. Open **Output**. Keep `PerformancePreset=Laptop` and
    `WorldWeatherEnabled=true`. The server owns one 32×6×32 field and prints
    diagnostics every ten wall seconds.
-2. Clouds cover X/Z **−2014…+2014** at **Y424–568**. Expand the client's
-   `Workspace.WEATHERED_WORLD_DEBUG_VOXELS`, select a visible Part and press **F**
-   to focus it. Sources are distributed across the map rather than centered at zero.
+2. Clouds cover X/Z **−2014…+2014** at **Y424–568**. Inspect the client folder
+   `Workspace.WEATHERED_CUBIC_CLOUDS`. Sources are distributed across the map
+   rather than centered at zero. Use the client visual controls below for voxels.
 3. Switch to the **server** view for controls. Try `wind 8 2`, `debugregions on`
    and `debugvectors on`. Let at least two simulated minutes advance and compare
    `cloudmotion` and `weatherregions`; dropped time can make wall time longer.
 
 The tested seed-84219 Scattered scenario with 8/2 m/s wind first displayed liquid
 at **18 simulated seconds**. Other winds, seeds and coverage settings can differ.
-Client snapshots show a bounded subset of liquid cells, so they are a diagnostic
-view of the field rather than complete cloud graphics.
+Cubic rendering receives the complete coarse liquid field at 1 Hz. Its bounded
+cube pool adds display detail; the physical cloud layer remains only 72 m deep.
+The separate diagnostic stream still contains a bounded subset of liquid cells.
 
 <details>
 <summary><strong>Keep the camera above the clouds in the isolated Play test</strong></summary>
@@ -200,7 +203,7 @@ Output show the response.
 | `autoclouds on` / `autoclouds off` | Toggle new scheduled events without deleting current liquid |
 | `seedstatus` | Inspect active/next seed settings, queue and remaining source budgets |
 | `wind 8 2` / `wind -8 -2` | Change physical X/Z background wind in m/s |
-| `debugregions on` / `debugvectors on` | Show optional regional boundaries and wind direction |
+| `debugregions on` / `debugvectors on` | Show boundaries; wind vectors appear in local Voxels/HybridDebug mode |
 | `speed 0.5` / `speed 1` | Reduce requested work or return to normal playback |
 | `pause` / `resume` | Preserve the timeline while paused, then continue |
 | `form 60` / `reset` / `help` | Queue bounded evolution, intentionally regenerate, or list commands |
@@ -221,6 +224,35 @@ explains every command and the exact multiplayer Studio test. With
 `WorldWeatherEnabled=false`, the retained Phase 2.5 bootstrap and local pooled
 renderer are available for comparison.
 
+### Local cloud graphics
+
+In **Play → Client**, select your `PlayerScripts.Weather.WeatherClient` script.
+Set **CloudRenderCommand** in Attributes, or use the client Command Bar:
+
+```lua
+local visuals = game.Players.LocalPlayer.PlayerScripts.Weather.WeatherClient.CloudVisualControls
+visuals:Invoke("cloudquality mobile")
+visuals:Invoke("cloudrender cubes")
+visuals:Invoke("cloudrenderstats")
+```
+
+| Local command | Result |
+| --- | --- |
+| `cloudrender cubes` / `voxels` / `hybriddebug` / `off` | Select small cubic volume cells, coarse numerical cells, both, or no graphics |
+| `cloudquality mobile` / `balanced` / `high` / `ultra` | Change capped client resources; server physics stays unchanged |
+| `clouddebug density` / `gradients` / `bounds` / `off` | Color cubes by reconstructed density, gradient or local height |
+| `cloudsnapshots` / `cloudrenderstats` | Inspect completeness, packet size, stale data, resource counts and CPU work |
+
+The default is **Cubes**, with Mobile on touch devices and Balanced otherwise.
+`cloudrender smooth` remains a compatibility alias for the cubic renderer.
+Normal graphics use only pooled three-dimensional Block Parts: no billboards,
+image cards, emitters or texture dependency. Sparse adaptive XYZ subdivisions
+sample the reconstructed liquid field. Smaller, denser lower cubes blend into
+larger upper elements within the real physical layer, with distance culling and
+strict creation/resource limits.
+Read the [Phase 2.65 rendering guide](docs/phase2.65-cloud-rendering.md) for geometry
+configuration, measured budgets, limitations and the required multi-angle Studio checklist.
+
 ## Inside the model
 
 The world uses packed float64 fields and reusable transport/source buffers.
@@ -239,7 +271,8 @@ The retained local MAC solver uses float32. Both keep a fixed physical
 | Logical regions | 4 × 4, each 1007 × 1007 studs | Same |
 | Initial Scattered sources / maximum | 6 / 16 | 8 / 16 |
 | Source build samples per step | 128 | 192 |
-| Snapshot rate / liquid Part cap | 1 Hz / 256 | 2 Hz / 512 |
+| Complete render data / packet bytes | 1 Hz / 8,576 | 1 Hz / 19,136 |
+| Diagnostic rate / voxel cap | 1 Hz / 256 | 2 Hz / 512 |
 | Maximum steps per Heartbeat | 1 | 2 |
 | Optional local MAC grid | 16 × 12 × 16 | 24 × 12 × 24 |
 
@@ -284,7 +317,8 @@ represent deep convection. The coarse circulation does not solve momentum or
 pressure projection; the optional local solver does. Its slower diagnostic clock
 and boundary relaxation are not synchronized two-way nesting.
 
-Snapshot interpolation only smooths diagnostic field changes. Numerical fluxes
+Complete render snapshots support bounded density/velocity reconstruction and
+soft visual transitions; sparse diagnostic summaries are excluded from it. Numerical fluxes
 and displacement tests establish transport. Sparse caps can omit liquid cells
 from the view without removing their atmospheric water. Precipitation fallout,
 open boundaries, terrain feedback and balanced long-term water/energy exchange
@@ -300,6 +334,8 @@ npx stylua src
 npx stylua --check src scripts tests
 lune run scripts/test-world-weather.luau
 lune run scripts/test-atmosphere.luau
+lune run scripts/test-seeded-clouds.luau
+lune run scripts/test-cloud-rendering.luau
 rojo build default.project.json -o build/WEATHERED.rbxlx
 git diff --check
 ```
@@ -311,6 +347,21 @@ and controls. `--quick` shortens long integration scenarios. The existing Phase 
 and 2.5 full suite also passed **8,240,846 checks**, loading the retained local
 production modules in their historical scenarios.
 Reports include source/test fingerprints so results can be tied to tested code.
+
+The corrected Phase 2.65 suite passes **498,026 checks** against production
+reconstruction, replication and cubic rendering modules. Normal elements are
+equal-axis **12/16/24/48-stud Block Parts**, with active cube caps of
+**256/512/768/1280** for Mobile/Balanced/High/Ultra. There is no cloud texture,
+billboard, image or emitter dependency. Source budgets and physical buffers stay
+unchanged by rendering.
+
+The matched Phase 2.6/2.65 native comparison measured **21.170/21.344 ms** Laptop
+and **46.351/45.535 ms** Full mean numerical step costs, with byte-identical
+trajectories. Client scheduled updates averaged roughly **2.0–2.2 ms** Mobile
+and **5.1 ms** Ultra on this host; occasional longer pauses remain in the report.
+These are native timings, not Studio FPS. The complete current measurements and
+five-view actual cubic-mesh projection procedure are in the
+[Phase 2.65 guide](docs/phase2.65-cloud-rendering.md).
 
 In the 240-second Laptop world test, liquid first appeared at 18 seconds, 986 cells
 contained above-threshold liquid at the end, and the maximum source-corrected
@@ -337,6 +388,7 @@ for complete results and remaining Studio checks.
 
 | Guide | What you will find |
 | --- | --- |
+| [Phase 2.65 cloud rendering](docs/phase2.65-cloud-rendering.md) | Complete density data, continuous reconstruction, small 3D cubes, quality budgets and required visual tests |
 | [Phase 2.6 world clouds](docs/phase2.6-world-clouds.md) | Full-world geometry, transport, coupling, replication, diagnostics and exact Studio procedure |
 | [Phase 2.5 cloud generation](docs/phase2.5-cloud-generation.md) | Retained local seeded geometry, bounded events and historical measurements |
 | [Cloud controls](docs/cloud-controls.md) | Legacy primitive shapes, live wind and earlier moving-cloud measurements |
@@ -358,6 +410,7 @@ src/
 │   ├── Microphysics/     Warm-cloud phase conversion
 │   ├── Dynamics/         Momentum, projection and 3D transport
 │   ├── Generation/       World seeds, heightmaps, noise and source descriptions
+│   ├── Rendering/        Complete render data, continuous density, local detail and lighting
 │   ├── World/            Coordinates, coarse field, sources, snapshots and client debug
 │   ├── Utilities/        State validation
 │   ├── Simulation.lua    Simulation ownership and stepping
@@ -367,6 +420,7 @@ src/
 │   ├── Debug/            Pooled voxel visualization
 │   └── WeatherServer.server.lua
 └── client/
+    ├── Rendering/        Capped local cubic volume renderer and resource pool
     ├── WorldWeatherClient.lua
     └── WeatherClient.client.lua
 
@@ -390,7 +444,8 @@ tests/                    Production-module tests and Roblox lookup adapters
 - [ ] Balance surface/precipitation water and energy exchange.
 - [ ] Expose sampling services for existing survival gameplay systems.
 - [ ] Add precipitation, terrain interaction and storm lifecycle.
-- [ ] Develop field-driven client cloud rendering and LOD.
+- [x] Implement field-driven client cloud reconstruction, pooled cubic volumes and LOD.
+- [ ] Validate cubic cloud appearance, transparency and device FPS in Studio.
 
 Core modules stay `--!strict`, with documented units, packed fields and reusable
 storage. Changes should preserve working inventory, crafting, movement and world

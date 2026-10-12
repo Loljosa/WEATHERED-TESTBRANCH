@@ -44,7 +44,7 @@ local function create(path: string, globals: { [string]: any }?): (Node, (Node) 
 		loading[node] = true
 		-- Lexical parameters provide Roblox-only globals without disabling Lune
 		-- codegen through a custom global environment. The module body is unchanged.
-		local source = "return function(script, require, Vector3, game, print, warn, Instance)\n"
+		local source = "return function(script, require, Vector3, game, print, warn, Instance, task, workspace, Enum, Color3, CFrame, UDim2)\n"
 			.. fs.readFile(node.SourcePath)
 			.. "\nend"
 		local execute = luau.load(source, {
@@ -59,7 +59,13 @@ local function create(path: string, globals: { [string]: any }?): (Node, (Node) 
 			if globals then globals.game else nil,
 			if globals and globals.print then globals.print else print,
 			if globals and globals.warn then globals.warn else warn,
-			if globals then globals.Instance else nil
+			if globals then globals.Instance else nil,
+			if globals then globals.task else nil,
+			if globals then globals.workspace else nil,
+			if globals and globals.Enum then globals.Enum else roblox.Enum,
+			if globals and globals.Color3 then globals.Color3 else roblox.Color3,
+			if globals and globals.CFrame then globals.CFrame else roblox.CFrame,
+			if globals and globals.UDim2 then globals.UDim2 else roblox.UDim2
 		)
 		assert(result ~= nil, "Module must return a value: " .. node.SourcePath)
 		loading[node] = nil

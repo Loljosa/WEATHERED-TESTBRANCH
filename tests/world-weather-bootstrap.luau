@@ -9,6 +9,7 @@ local createLoader = require("./RobloxModuleLoader")
 -- modules, and fake Roblox plumbing. No Studio/network performance is inferred.
 return function(root: any, loadModule: any, check: any, near: any, rejects: any, _quick: boolean?)
 	local Snapshot = loadModule(root.World.WeatherSnapshot)
+	local RenderSnapshot = loadModule(root.Rendering.CloudRenderSnapshot)
 	local function signal(): any
 		local connections = {}
 		return {
@@ -41,6 +42,7 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 	local function setup(canonicalSeed: any): any
 		local instances: { any } = {}
 		local broadcasts: { buffer } = {}
+		local renderBroadcasts: { buffer } = {}
 		local heartbeat, leaving = signal(), signal()
 		local attributes =
 			serde.decode("json", fs.readFile("src/server/WeatherServer.meta.json")).attributes
@@ -93,8 +95,13 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 							return same.OnInvoke(...)
 						end
 					elseif key == "FireAllClients" then
-						return function(_same: any, message: buffer)
-							table.insert(broadcasts, message)
+						return function(same: any, message: buffer)
+							table.insert(
+								if same.Parent.Name == "WEATHERED_CLOUD_RENDER_DATA"
+									then renderBroadcasts
+									else broadcasts,
+								message
+							)
 						end
 					elseif key == "Destroy" then
 						return function(same: any)
@@ -210,6 +217,7 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 			Channel = channel,
 			Instances = instances,
 			Broadcasts = broadcasts,
+			RenderBroadcasts = renderBroadcasts,
 			Warnings = warnings,
 			Attributes = attributes,
 			Lifecycle = lifecycle,
@@ -239,6 +247,24 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		"The snapshot RemoteEvent cannot mutate weather through a server request handler"
 	)
 	near(#context.Broadcasts, 1, 0, "Production bootstrap creates a single initial global summary")
+	local renderChannel = context.Storage:FindFirstChild("WEATHERED_CLOUD_RENDER_DATA")
+	check(renderChannel ~= nil, "Smooth clouds use a separate complete rendering channel")
+	near(
+		#context.RenderBroadcasts,
+		1,
+		0,
+		"Complete rendering data is immediately available for late joins"
+	)
+	local renderRequest = renderChannel:FindFirstChild("GetSnapshot")
+	local renderFirst = RenderSnapshot.Decode(renderRequest.OnServerInvoke({}))
+	check(
+		renderFirst.Complete and renderFirst.SizeX == 32,
+		"Production rendering neighborhoods are complete"
+	)
+	check(
+		renderRequest.OnServerInvoke({}, "wind", 50, 50) == nil,
+		"Rendering bootstrap cannot invoke administration"
+	)
 	local playerA, playerB = {}, {}
 	local firstA, firstB = request.OnServerInvoke(playerA), request.OnServerInvoke(playerB)
 	check(
@@ -398,6 +424,15 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 	)
 	near(fresh.Seed, -39, 0, "Regenerated authoritative snapshots use the newly selected seed")
 	near(fresh.Time, 0, 0, "Regeneration deliberately starts a new physical timeline")
+	local renderFresh = RenderSnapshot.Decode(context.RenderBroadcasts[#context.RenderBroadcasts])
+	near(
+		renderFresh.Generation,
+		fresh.Generation,
+		0,
+		"Both channels invalidate history on regeneration"
+	)
+	near(renderFresh.Seed, -39, 0, "Smooth rendering receives the regenerated world seed")
+	near(renderFresh.Time, 0, 0, "Smooth rendering receives the new simulation timeline")
 	check(
 		context.Storage:FindFirstChild("WEATHERED_WORLD_WEATHER") == context.Channel,
 		"Existing client connections survive intentional regeneration"
@@ -422,9 +457,9 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 			functions += 1
 		end
 	end
-	near(folders, 1, 0, "The server owns one replicated weather channel for all players")
-	near(events, 1, 0, "World weather uses a single low-rate snapshot RemoteEvent")
-	near(functions, 1, 0, "World weather uses a single read-only late-join function")
+	near(folders, 2, 0, "Diagnostic and complete render channels are shared across all players")
+	near(events, 2, 0, "Each shared channel uses one low-rate snapshot RemoteEvent")
+	near(functions, 2, 0, "Each shared channel uses one read-only late-join function")
 	rejects(function()
 		endpoint:Invoke("worldsize", 8056)
 	end, "Unsupported world sizes cannot silently double the domain")
@@ -472,6 +507,10 @@ return function(root: any, loadModule: any, check: any, near: any, rejects: any,
 		"Script cleanup disconnects the request-limiter player listener"
 	)
 	check(request.OnServerInvoke == nil, "Script cleanup removes the read-only snapshot handler")
+	check(
+		renderChannel.Destroyed and renderRequest.OnServerInvoke == nil,
+		"Script cleanup releases the complete rendering channel"
+	)
 	check(endpoint.Destroyed, "Script cleanup releases its server-only developer BindableFunction")
 	near(
 		context.Script:GetAttributeChangedSignal("WeatherCommand").ConnectionCount(),

@@ -52,12 +52,13 @@ export type Replication = typeof(setmetatable(
 ))
 
 local function createChannel(): Transport
-	local folder = Instance.new("Folder")
-	folder.Name = "WEATHERED_WORLD_WEATHER"
+	local name = "WEATHERED_WORLD_WEATHER"
 	assert(
-		not ReplicatedStorage:FindFirstChild(folder.Name),
+		not ReplicatedStorage:FindFirstChild(name),
 		"World weather replication is already initialized"
 	)
+	local folder = Instance.new("Folder")
+	folder.Name = name
 	local event = Instance.new("RemoteEvent")
 	event.Name = "Snapshot"
 	event.Parent = folder
@@ -120,14 +121,20 @@ function WeatherReplication.new(field: any, settings: Settings?, transport: Tran
 		RejectedRequests = 0,
 		Destroyed = false,
 	}, WeatherReplication)
-	self.Channel.SetRequestHandler(function(player: any): buffer?
-		if type(player) == "table" and player.RemovedPlayer then
-			self.LastRequests[player.RemovedPlayer] = nil
-			return nil
-		end
-		return self:RequestSnapshot(player)
+	local initialized, message = pcall(function()
+		self.Channel.SetRequestHandler(function(player: any): buffer?
+			if type(player) == "table" and player.RemovedPlayer then
+				self.LastRequests[player.RemovedPlayer] = nil
+				return nil
+			end
+			return self:RequestSnapshot(player)
+		end)
+		self:Publish()
 	end)
-	self:Publish()
+	if not initialized then
+		self:Destroy()
+		error(message, 2)
+	end
 	return self
 end
 

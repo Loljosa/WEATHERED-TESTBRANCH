@@ -9,6 +9,7 @@ local WorldSeed = require(Root.Generation.WorldSeed)
 local Controller = require(script.Parent.WorldWeatherController)
 local Controls = require(script.Parent.WorldWeatherControls)
 local Replication = require(script.Parent.WeatherReplication)
+local RenderReplication = require(script.Parent.CloudRenderReplication)
 local Bootstrap = {}
 
 function Bootstrap.Start(weatherScript: Script)
@@ -63,6 +64,8 @@ function Bootstrap.Start(weatherScript: Script)
 	})
 	local controls = Controls.new(controller)
 	local full = controller.Options.Preset == "Full"
+	local renderRate = number("CloudRenderSnapshotHz", 1)
+	assert(renderRate >= 0.25 and renderRate <= 2, "CloudRenderSnapshotHz must be 0.25..2")
 	local replication = Replication.new(controller.Field, {
 		Seed = seed,
 		MaxRecords = if full then 512 else 256,
@@ -75,6 +78,17 @@ function Bootstrap.Start(weatherScript: Script)
 			return controller.DroppedSimulationTime
 		end,
 	})
+	local initialized, renderReplication = pcall(RenderReplication.new, controller.Field, {
+		Seed = seed,
+		RateHz = renderRate,
+		DroppedTime = function(): number
+			return controller.DroppedSimulationTime
+		end,
+	})
+	if not initialized then
+		replication:Destroy()
+		error(renderReplication, 2)
+	end
 	local replicatedField = controller.Field
 	local function resultMessage(result: any): string
 		if type(result) == "table" then
@@ -94,6 +108,7 @@ function Bootstrap.Start(weatherScript: Script)
 	local function synchronizeReplication()
 		if replicatedField ~= controller.Field then
 			replication:SetField(controller.Field, controller.Options.Seed)
+			renderReplication:SetField(controller.Field, controller.Options.Seed)
 			replicatedField = controller.Field
 		end
 		replication:SetDebugFlags(controller.DebugRegions, controller.DebugVectors)
@@ -142,6 +157,7 @@ function Bootstrap.Start(weatherScript: Script)
 			controller:Advance(dt)
 			synchronizeReplication()
 			replication:Update(dt)
+			renderReplication:Update(dt)
 		end)
 		if not ok then
 			if heartbeat then
@@ -188,9 +204,15 @@ function Bootstrap.Start(weatherScript: Script)
 			destroyingConnection:Disconnect()
 		end
 		replication:Destroy()
+		renderReplication:Destroy()
 		bindable:Destroy()
 	end
 	destroyingConnection = weatherScript.Destroying:Connect(stop)
-	return { Controller = controller, Replication = replication, Stop = stop }
+	return {
+		Controller = controller,
+		Replication = replication,
+		RenderReplication = renderReplication,
+		Stop = stop,
+	}
 end
 return Bootstrap
